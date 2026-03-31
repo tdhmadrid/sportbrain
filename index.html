@@ -1430,7 +1430,7 @@ async function fetchMarketsLegacy() {
       if (!m?.question) return false;
       const q = m.question;
       // Junk filter
-      if (/president|election|nominat|republican|democrat|rfk|kennedy|trump|biden|crypto|bitcoin|stock price|above \$|below \$/i.test(q)) return false;
+      if (/president|election|nominat|republican|democrat|rfk|kennedy|trump|biden|crypto|bitcoin|stock price|above \$|below \$|O\/U|over\/under|over under|total goals|total points|\bO\s*\d|\bU\s*\d|handicap|spread|ats\b|prop\b|anytime|first goal|last goal|both teams|btts|clean sheet|correct score|exact score/i.test(q)) return false;
       // Date: closes within 4 days
       const endTs = new Date(m.endDate || 0).getTime();
       if (!endTs || endTs < now || endTs > now + fourDays) return false;
@@ -1530,7 +1530,9 @@ function renderMarkets() {
           ${m.isLive ? '<span style="font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(255,77,106,0.15);color:var(--danger);border:1px solid rgba(255,77,106,0.3);animation:pulse 1.5s infinite">● LIVE</span>' : ''}
         </div>
         <div style="font-size:12px;line-height:1.4;color:var(--text)">${m.question.slice(0,70)}${m.question.length>70?'...':''}</div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px">${m.eventTitle ? m.eventTitle.slice(0,40)+' · ' : ''}Vol: $${(m.volume/1000).toFixed(0)}k</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px">
+          ${marketTypeLabel(m.question)}${m.eventTitle ? ' · '+m.eventTitle.slice(0,30) : ''} · Vol: $${(m.volume/1000).toFixed(0)}k
+        </div>
       </td>
       <td><span class="sport-badge sport-${m.sport}">${sportLabel(m.sport)}</span></td>
       <td style="font-family:var(--mono);font-size:11px;color:var(--warn)">${fmtDate(m.endDate)}</td>
@@ -1771,11 +1773,18 @@ function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis, best
         id="placeBtn-${market.id}" class="place-bet-btn">
       </button>
     </div>` : ''}
+    <div style="padding:10px 14px;background:var(--bg);border-radius:6px;border:1px solid var(--border);margin-top:2px">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1.5px;margin-bottom:4px">QUÉ SIGNIFICA ESTA APUESTA</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5" id="betExplainer"></div>
+    </div>
     <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;padding-top:6px" id="fase-note">
       FASE 2 — Paper activo. Cambia a REAL cuando estés listo.
     </div>
   `;
   content.classList.add('visible');
+  // Populate bet explainer
+  const explEl = document.getElementById('betExplainer');
+  if (explEl) explEl.innerHTML = betSideExplainer(market.question, best.side);
   // Style the bet button based on mode
   updateBetButton(market.id, betSize, best.side);
 }
@@ -1886,6 +1895,39 @@ function updateSportLimit(sport, val) {
 
 // ─── UTILS ────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function marketTypeLabel(q) {
+  if (/O\/U|over\/under|total goals|total points|O\s+\d|U\s+\d/i.test(q))  return '<span style="color:var(--purple);font-weight:500">O/U</span>';
+  if (/correct score|exact score/i.test(q))                                       return '<span style="color:var(--danger)">SCORE EXACTO</span>';
+  if (/first goal|last goal|anytime/i.test(q))                                    return '<span style="color:var(--warn)">GOLEADOR</span>';
+  if (/handicap|spread/i.test(q))                                                 return '<span style="color:var(--warn)">HANDICAP</span>';
+  if (/win|beat|defeat|advance/i.test(q))                         return '<span style="color:var(--accent)">GANADOR</span>';
+  return '<span style="color:var(--text3)">MERCADO</span>';
+}
+
+function betSideExplainer(question, side) {
+  // Returns a plain-language explanation of what YES and NO mean for this market
+  const q = question || '';
+  if (/O\/U\s*([\d.]+)/i.test(q)) {
+    const line = q.match(/O\/U\s*([\d.]+)/i)?.[1] || '?';
+    return side === 'YES'
+      ? `Apuestas a que habrá MÁS de ${line} goles/puntos`
+      : `Apuestas a que habrá MENOS de ${line} goles/puntos (o exactamente ${line})`;
+  }
+  if (/will (.+) win/i.test(q)) {
+    const team = q.match(/will (.+?) win/i)?.[1] || 'el equipo';
+    return side === 'YES'
+      ? `Apuestas a que ${team} GANA`
+      : `Apuestas a que ${team} NO gana (pierde o empata)`;
+  }
+  if (/will (.+) beat/i.test(q)) {
+    const parts = q.match(/will (.+?) beat (.+?)[\?$]/i);
+    return side === 'YES'
+      ? `Apuestas a que ${parts?.[1]||'equipo A'} GANA a ${parts?.[2]||'equipo B'}`
+      : `Apuestas a que ${parts?.[1]||'equipo A'} NO gana`;
+  }
+  return side === 'YES' ? 'Apuestas al resultado SÍ ocurre' : 'Apuestas a que el resultado NO ocurre';
+}
 
 function fmtDate(d) {
   if (!d) return '—';
