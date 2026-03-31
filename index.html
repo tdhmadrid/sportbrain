@@ -1632,7 +1632,7 @@ async function analyzeMarket(id) {
     _lastAnalyzedMarket = market;
     const demoAn = getDemoAnalysis(market, ev, betSize);
     _lastAnalysis = demoAn;
-    renderAnalysis(market, realProb, ev, kellyFrac, betSize, demoAn);
+    renderAnalysis(market, realProb, ev, kellyFrac, betSize, demoAn, best);
     return;
   }
 
@@ -1685,7 +1685,7 @@ Responde SOLO con el JSON, sin markdown ni texto adicional.`;
     const analysis = JSON.parse(clean);
     _lastAnalyzedMarket = market;
     _lastAnalysis = analysis;
-    renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis);
+    renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis, best);
     saveToHistory(market, analysis, betSize);
     state.totalAnalysis++;
     updateUI();
@@ -1698,7 +1698,9 @@ Responde SOLO con el JSON, sin markdown ni texto adicional.`;
   }
 }
 
-function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
+function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis, best) {
+  // Ensure best is always defined
+  if (!best) best = getBestSide(market.polyOdds, estimateRealProb(market));
   document.getElementById('aiThinking').classList.remove('visible');
   const content = document.getElementById('analysisContent');
   const verdictClass = { BET: 'verdict-bet', LAY: 'verdict-lay', PASS: 'verdict-pass', WATCH: 'verdict-watch' }[analysis.verdict] || 'verdict-watch';
