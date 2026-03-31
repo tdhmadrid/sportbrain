@@ -693,15 +693,30 @@
   <div class="modal">
     <h2>⚡ SportsBrain</h2>
     <p>Fase 1 — Análisis y monitoreo sin ejecución.<br>
-    Para que el cerebro LLM analice los mercados, necesitas tu API key de Anthropic.<br>
-    La key se guarda solo en tu navegador (localStorage).</p>
-    <input class="input-field" type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
-    <div style="margin-bottom:12px">
-      <label style="font-size:12px;color:var(--text2);">Capital inicial (USD)</label>
-      <input class="input-field" type="number" id="capitalInput" placeholder="100" min="1" max="10000" style="margin-top:6px;margin-bottom:0">
-    </div>
+    Conecta tus Cloudflare Workers para activar el cerebro LLM y los datos de Polymarket.<br>
+    Las URLs se guardan en tu navegador (localStorage).</p>
+
+    <label style="font-size:11px;color:var(--text3);letter-spacing:1px;display:block;margin-bottom:4px">ANTHROPIC WORKER URL</label>
+    <input class="input-field" type="url" id="anthropicWorkerInput" placeholder="https://sportsbrain-anthropic.TU-USER.workers.dev">
+
+    <label style="font-size:11px;color:var(--text3);letter-spacing:1px;display:block;margin-bottom:4px">POLYMARKET WORKER URL</label>
+    <input class="input-field" type="url" id="polymarketWorkerInput" placeholder="https://sportsbrain-polymarket.TU-USER.workers.dev">
+
+    <label style="font-size:11px;color:var(--text3);letter-spacing:1px;display:block;margin-bottom:4px">CAPITAL INICIAL (USD)</label>
+    <input class="input-field" type="number" id="capitalInput" placeholder="100" min="1" max="10000" style="margin-bottom:16px">
+
     <button class="btn-primary" onclick="saveConfig()">Iniciar SportsBrain</button>
-    <button class="btn-secondary" onclick="demoMode()">Entrar en modo demo (sin API key)</button>
+    <button class="btn-secondary" onclick="demoMode()">Modo demo (sin Workers)</button>
+
+    <div style="margin-top:16px;padding:12px;background:var(--bg3);border-radius:6px;border:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1px;margin-bottom:6px">SETUP RÁPIDO</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7">
+        1. Deploy <code style="color:var(--accent);font-family:var(--mono)">anthropic-proxy/index.js</code> en Cloudflare Workers<br>
+        2. Agrega el secret: <code style="color:var(--accent);font-family:var(--mono)">wrangler secret put ANTHROPIC_API_KEY</code><br>
+        3. Deploy <code style="color:var(--accent);font-family:var(--mono)">polymarket-proxy/index.js</code> como segundo Worker<br>
+        4. Pega las URLs arriba y listo
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1008,7 +1023,7 @@
       <div class="config-row">
         <div><div class="config-label">Anthropic API Key</div>
         <div class="config-sub">Motor LLM de análisis</div></div>
-        <button class="btn-analyze" onclick="resetApiKey()">CAMBIAR KEY</button>
+        <button class="btn-analyze" onclick="resetApiKey()">CAMBIAR WORKERS</button>
       </div>
       <div class="config-row">
         <div><div class="config-label">Polymarket API</div>
@@ -1034,9 +1049,16 @@
 </main>
 
 <script>
+// ─── WORKER URLS ─────────────────────────────────────
+// Puedes hardcodear aquí las URLs después de deployar,
+// o dejar vacío y configurarlas desde el modal de inicio.
+const WORKERS = {
+  anthropic: '',   // https://sportsbrain-anthropic.TU-USER.workers.dev
+  polymarket: '',  // https://sportsbrain-polymarket.TU-USER.workers.dev
+};
+
 // ─── STATE ───────────────────────────────────────────
 const state = {
-  apiKey: '',
   demo: false,
   capital: 100,
   bankroll: 100,
@@ -1055,7 +1077,8 @@ window.onload = () => {
   const saved = localStorage.getItem('sportsbrain_config');
   if (saved) {
     const cfg = JSON.parse(saved);
-    state.apiKey = cfg.apiKey || '';
+    WORKERS.anthropic = cfg.anthropicWorker || '';
+    WORKERS.polymarket = cfg.polymarketWorker || '';
     state.capital = cfg.capital || 100;
     state.bankroll = cfg.bankroll || state.capital;
     state.demo = cfg.demo || false;
@@ -1064,24 +1087,28 @@ window.onload = () => {
     state.totalAnalysis = cfg.totalAnalysis || 0;
     document.getElementById('apiModal').style.display = 'none';
     updateUI();
-    log('Config cargada desde localStorage', 'accent');
+    const wA = WORKERS.anthropic ? '✓ Anthropic' : '✗ Anthropic';
+    const wP = WORKERS.polymarket ? '✓ Polymarket' : '✗ Polymarket';
+    log(`Config cargada — Workers: ${wA} / ${wP}`, 'accent');
     renderHistory();
     renderPatterns();
   }
 };
 
 function saveConfig() {
-  const key = document.getElementById('apiKeyInput').value.trim();
+  const wA = document.getElementById('anthropicWorkerInput').value.trim().replace(/\/$/, '');
+  const wP = document.getElementById('polymarketWorkerInput').value.trim().replace(/\/$/, '');
   const cap = parseFloat(document.getElementById('capitalInput').value) || 100;
-  if (!key) { alert('Ingresa tu API key de Anthropic'); return; }
-  state.apiKey = key;
+  if (!wA) { alert('Agrega la URL del Worker de Anthropic'); return; }
+  WORKERS.anthropic = wA;
+  WORKERS.polymarket = wP;
   state.capital = cap;
   state.bankroll = cap;
   state.demo = false;
   persist();
   document.getElementById('apiModal').style.display = 'none';
   updateUI();
-  log('API key configurada — modo real activo', 'accent');
+  log('Workers configurados — LLM activo', 'accent');
 }
 
 function demoMode() {
@@ -1101,7 +1128,8 @@ function resetApiKey() {
 
 function persist() {
   localStorage.setItem('sportsbrain_config', JSON.stringify({
-    apiKey: state.apiKey,
+    anthropicWorker: WORKERS.anthropic,
+    polymarketWorker: WORKERS.polymarket,
     capital: state.capital,
     bankroll: state.bankroll,
     demo: state.demo,
@@ -1161,8 +1189,9 @@ async function fetchMarkets() {
 
   try {
     // Polymarket CLOB API — markets endpoint (public, no auth needed para leer)
+    const polyBase = WORKERS.polymarket || 'https://gamma-api.polymarket.com';
     const res = await fetch(
-      'https://gamma-api.polymarket.com/markets?closed=false&tag_slug=sports&limit=40&order=volume&ascending=false'
+      `${polyBase}/markets?closed=false&tag_slug=sports&limit=40&order=volume&ascending=false`
     );
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
@@ -1322,7 +1351,8 @@ Proporciona en JSON:
 Responde SOLO con el JSON, sin markdown ni texto adicional.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const anthropicUrl = WORKERS.anthropic || 'https://api.anthropic.com/v1/messages';
+    const res = await fetch(anthropicUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
