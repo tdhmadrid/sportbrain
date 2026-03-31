@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SportsBrain — Bot Fase 1</title>
+<title>SportsBrain — Bot Fase 2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -675,6 +675,13 @@
 
   .btn-secondary:hover { border-color: var(--border2); color: var(--text); }
 
+  /* MODE BANNER */
+  #modeBanner { position: relative; z-index: 1; }
+
+  /* PLACE BET BUTTON */
+  .place-bet-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+  .place-bet-btn:active { transform: scale(0.98); }
+
   .section-gap { margin-bottom: 16px; }
   .small-title {
     font-family: var(--mono);
@@ -720,6 +727,51 @@
   </div>
 </div>
 
+<!-- ═══ MODAL: ACTIVAR MODO REAL ═══ -->
+<div class="modal-overlay" id="modeModal" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:32px;margin-bottom:8px">🔴</div>
+      <h2 style="color:var(--danger)">Activar Modo Real</h2>
+    </div>
+    <div style="background:rgba(255,77,106,0.06);border:1px solid rgba(255,77,106,0.2);border-radius:8px;padding:14px 16px;margin-bottom:20px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--danger);letter-spacing:1.5px;margin-bottom:8px">⚠ ADVERTENCIA</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.7;margin:0">
+        En modo real las apuestas se ejecutan directamente en Polymarket usando tu wallet de MetaMask.<br><br>
+        <strong style="color:var(--text)">Requiere:</strong><br>
+        · MetaMask instalado en el navegador<br>
+        · USDC en tu wallet en red Polygon<br>
+        · Cuenta en Polymarket (polymarket.com)<br><br>
+        Puedes volver a Paper en cualquier momento con un click.
+      </p>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;display:block;margin-bottom:6px">LÍMITE MÁXIMO POR APUESTA REAL ($)</label>
+      <input class="input-field" type="number" id="realMaxBet" placeholder="Ej: 10" min="1" max="1000" value="10">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">El bot nunca apostará más de este monto en una sola apuesta real.</div>
+    </div>
+    <button class="btn-primary" id="connectWalletBtn" onclick="connectWalletAndActivate()" style="background:var(--danger)">
+      Conectar MetaMask y Activar Real
+    </button>
+    <button class="btn-secondary" onclick="closeModeModal()">Cancelar — seguir en Paper</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: RESOLVER APUESTA PAPER ═══ -->
+<div class="modal-overlay" id="resolveModal" style="display:none">
+  <div class="modal" style="max-width:460px">
+    <h2 style="margin-bottom:6px;font-size:17px">Resolver apuesta paper</h2>
+    <p id="resolveModalTitle" style="font-size:12px;color:var(--text2);margin-bottom:4px"></p>
+    <p id="resolveModalAmount" style="font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:20px"></p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px">¿Cuál fue el resultado?</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button class="btn-primary" id="resolveWonBtn" style="background:var(--accent);color:#000">✓ GANADA</button>
+      <button class="btn-primary" id="resolveLostBtn" style="background:var(--danger)">✗ PERDIDA</button>
+    </div>
+    <button class="btn-secondary" onclick="closeResolveModal()" style="margin-top:10px">Cancelar</button>
+  </div>
+</div>
+
 <!-- HEADER -->
 <header>
   <div style="display:flex;align-items:center;gap:12px">
@@ -727,7 +779,7 @@
       <div class="logo-dot"></div>
       SportsBrain
     </div>
-    <span class="phase-badge">FASE 1</span>
+    <span class="phase-badge" id="phaseBadge">FASE 2</span>
   </div>
   <div class="header-right">
     <div class="status-pill">
@@ -746,10 +798,26 @@
   <button class="nav-tab" onclick="showTab('performance', this)">PERFORMANCE</button>
   <button class="nav-tab" onclick="showTab('learning', this)">APRENDIZAJE</button>
   <button class="nav-tab" onclick="showTab('config', this)">CONFIG</button>
+  <button class="nav-tab" onclick="showTab('bets', this)">APUESTAS</button>
   <button class="nav-tab" onclick="showTab('log', this)">LOG</button>
 </nav>
 
 <main>
+
+  <!-- ===== EXECUTION MODE BANNER ===== -->
+  <div id="modeBanner" style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;margin-bottom:16px;border-radius:8px;border:1px solid;transition:all 0.3s">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div id="modeIcon" style="width:10px;height:10px;border-radius:50%"></div>
+      <div>
+        <div id="modeTitle" style="font-family:var(--head);font-size:13px;font-weight:700"></div>
+        <div id="modeSub" style="font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.5px"></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="walletChip" style="display:none;font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:4px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);color:var(--accent)"></div>
+      <button id="switchModeBtn" onclick="showModeSwitch()" style="font-family:var(--mono);font-size:11px;letter-spacing:0.5px;padding:6px 14px;border-radius:5px;cursor:pointer;transition:all 0.2s"></button>
+    </div>
+  </div>
 
   <!-- ===== TAB: MERCADOS ===== -->
   <div class="tab-panel active" id="tab-markets">
@@ -1034,6 +1102,64 @@
     </div>
   </div>
 
+  <!-- ===== TAB: APUESTAS ===== -->
+  <div class="tab-panel" id="tab-bets">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-family:var(--head);font-size:20px;font-weight:700" id="betsTitle">Apuestas Paper</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:2px" id="betsSub">Simulación sin riesgo real</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-analyze" onclick="filterBets('all')" id="bf-all" style="opacity:1">TODAS</button>
+        <button class="btn-analyze" onclick="filterBets('open')" id="bf-open">ABIERTAS</button>
+        <button class="btn-analyze" onclick="filterBets('won')" id="bf-won">GANADAS</button>
+        <button class="btn-analyze" onclick="filterBets('lost')" id="bf-lost">PERDIDAS</button>
+      </div>
+    </div>
+
+    <div class="grid-4 section-gap" id="betsKpis">
+      <div class="metric">
+        <div class="metric-label">APUESTAS TOTALES</div>
+        <div class="metric-value" id="betsTotalCount">0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">ABIERTAS</div>
+        <div class="metric-value warn-c" id="betsOpenCount">0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">WIN RATE</div>
+        <div class="metric-value up" id="betsWinRate">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">P&L</div>
+        <div class="metric-value" id="betsPnl">$0.00</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="market-table" id="betsTable">
+        <thead>
+          <tr>
+            <th>MERCADO</th>
+            <th>DEPORTE</th>
+            <th>MODO</th>
+            <th>MONTO</th>
+            <th>ODDS</th>
+            <th>ESTADO</th>
+            <th>P&L</th>
+            <th>FECHA</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="betsBody">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">
+            Aún no hay apuestas. Analiza un mercado y haz click en APOSTAR.
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- ===== TAB: LOG ===== -->
   <div class="tab-panel" id="tab-log">
     <div class="card">
@@ -1042,7 +1168,7 @@
         <button class="btn-analyze" onclick="clearLog()">LIMPIAR</button>
       </div>
       <div id="logBody" style="max-height:600px;overflow-y:auto">
-        <div class="log-entry"><span class="log-time">INIT</span><span class="log-accent">SportsBrain v0.1 — Fase 1 arrancado</span></div>
+        <div class="log-entry"><span class="log-time">INIT</span><span class="log-accent">SportsBrain v0.2 — Fase 2 arrancado</span></div>
       </div>
     </div>
   </div>
@@ -1061,11 +1187,16 @@ const WORKERS = {
 // ─── STATE ───────────────────────────────────────────
 const state = {
   demo: false,
+  executionMode: 'paper',   // 'paper' | 'real'
+  walletAddress: '',
   capital: 100,
   bankroll: 100,
+  paperBankroll: 100,
+  realBankroll: 0,
   totalAnalysis: 0,
   markets: [],
   history: [],
+  bets: [],                 // active + resolved bets
   patterns: {},
   sports: { fut: true, nba: true, nfl: true, ten: false, mlb: false },
   kellyFactor: 0.25,
@@ -1082,8 +1213,13 @@ window.onload = () => {
     WORKERS.polymarket = cfg.polymarketWorker || '';
     state.capital = cfg.capital || 100;
     state.bankroll = cfg.bankroll || state.capital;
+    state.paperBankroll = cfg.paperBankroll || state.capital;
+    state.realBankroll = cfg.realBankroll || 0;
     state.demo = cfg.demo || false;
+    state.executionMode = cfg.executionMode || 'paper';
+    state.walletAddress = cfg.walletAddress || '';
     state.history = cfg.history || [];
+    state.bets = cfg.bets || [];
     state.patterns = cfg.patterns || {};
     state.totalAnalysis = cfg.totalAnalysis || 0;
     document.getElementById('apiModal').style.display = 'none';
@@ -1091,8 +1227,10 @@ window.onload = () => {
     const wA = WORKERS.anthropic ? '✓ Anthropic' : '✗ Anthropic';
     const wP = WORKERS.polymarket ? '✓ Polymarket' : '✗ Polymarket';
     log(`Config cargada — Workers: ${wA} / ${wP}`, 'accent');
+    updateModeUI();
     renderHistory();
     renderPatterns();
+    renderBets();
   }
 };
 
@@ -1109,6 +1247,8 @@ function saveConfig() {
   persist();
   document.getElementById('apiModal').style.display = 'none';
   updateUI();
+  updateModeUI();
+  renderBets();
   log('Workers configurados — LLM activo', 'accent');
 }
 
@@ -1119,7 +1259,7 @@ function demoMode() {
   document.getElementById('apiModal').style.display = 'none';
   updateUI();
   log('Modo demo activo — análisis simulado', 'warn');
-  // Load demo markets
+  updateModeUI();
   loadDemoMarkets();
 }
 
@@ -1133,8 +1273,13 @@ function persist() {
     polymarketWorker: WORKERS.polymarket,
     capital: state.capital,
     bankroll: state.bankroll,
+    paperBankroll: state.paperBankroll,
+    realBankroll: state.realBankroll,
     demo: state.demo,
+    executionMode: state.executionMode,
+    walletAddress: state.walletAddress,
     history: state.history,
+    bets: state.bets,
     patterns: state.patterns,
     totalAnalysis: state.totalAnalysis
   }));
@@ -1444,7 +1589,10 @@ async function analyzeMarket(id) {
 
   if (state.demo) {
     await sleep(1800);
-    renderAnalysis(market, realProb, ev, kellyFrac, betSize, getDemoAnalysis(market, ev, betSize));
+    _lastAnalyzedMarket = market;
+    const demoAn = getDemoAnalysis(market, ev, betSize);
+    _lastAnalysis = demoAn;
+    renderAnalysis(market, realProb, ev, kellyFrac, betSize, demoAn);
     return;
   }
 
@@ -1486,6 +1634,8 @@ Responde SOLO con el JSON, sin markdown ni texto adicional.`;
     const text = data.content?.[0]?.text || '{}';
     const clean = text.replace(/```json|```/g, '').trim();
     const analysis = JSON.parse(clean);
+    _lastAnalyzedMarket = market;
+    _lastAnalysis = analysis;
     renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis);
     saveToHistory(market, analysis, betSize);
     state.totalAnalysis++;
@@ -1563,11 +1713,20 @@ function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
       <div class="analysis-text">${analysis.risk_factors}</div>
     </div>` : ''}
 
-    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;padding-top:4px">
-      FASE 1 — Solo análisis. Ejecución disponible en Fase 2.
+    ${(analysis.verdict === 'BET' && betSize > 0) ? `
+    <div id="placeBetWrap-${market.id}" style="margin-top:4px">
+      <button onclick="placeBet('${market.id}', ${betSize.toFixed(4)}, ${market.polyOdds.toFixed(4)}, '${market.question.replace(/'/g,"\'").slice(0,80)}')"
+        style="width:100%;padding:12px;border-radius:7px;font-family:var(--head);font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.5px;border:none"
+        id="placeBtn-${market.id}" class="place-bet-btn">
+      </button>
+    </div>` : ''}
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;padding-top:6px" id="fase-note">
+      FASE 2 — Paper activo. Cambia a REAL cuando estés listo.
     </div>
   `;
   content.classList.add('visible');
+  // Style the bet button based on mode
+  updateBetButton(market.id, betSize);
 }
 
 function getDemoAnalysis(market, ev, betSize) {
@@ -1688,6 +1847,396 @@ function fmtDate(d) {
   if (days === 1) return '1d ' + hrs + 'h';
   return days + 'd';
 }
+
+// ═══════════════════════════════════════════════════════
+// FASE 2 — EXECUTION ENGINE
+// ═══════════════════════════════════════════════════════
+
+let _lastAnalyzedMarket = null;
+let _lastAnalysis = null;
+
+// ── Mode UI ────────────────────────────────────────────
+function updateModeUI() {
+  const isPaper = state.executionMode === 'paper';
+  const banner = document.getElementById('modeBanner');
+  const icon   = document.getElementById('modeIcon');
+  const title  = document.getElementById('modeTitle');
+  const sub    = document.getElementById('modeSub');
+  const btn    = document.getElementById('switchModeBtn');
+  const chip   = document.getElementById('walletChip');
+  const badge  = document.getElementById('phaseBadge');
+
+  if (isPaper) {
+    banner.style.background = 'rgba(245,166,35,0.06)';
+    banner.style.borderColor = 'rgba(245,166,35,0.25)';
+    icon.style.background = 'var(--warn)';
+    title.textContent = 'MODO PAPER TRADING';
+    title.style.color = 'var(--warn)';
+    sub.textContent = 'Las apuestas son simuladas — sin dinero real';
+    btn.textContent = '🔴 ACTIVAR REAL';
+    btn.style.background = 'rgba(255,77,106,0.1)';
+    btn.style.border = '1px solid rgba(255,77,106,0.3)';
+    btn.style.color = 'var(--danger)';
+    chip.style.display = 'none';
+    badge.textContent = 'FASE 2 · PAPER';
+    badge.style.color = 'var(--warn)';
+    badge.style.borderColor = 'rgba(245,166,35,0.3)';
+    badge.style.background = 'rgba(245,166,35,0.08)';
+    document.getElementById('betsTitle').textContent = 'Apuestas Paper';
+    document.getElementById('betsSub').textContent = 'Simulación sin riesgo real';
+  } else {
+    banner.style.background = 'rgba(255,77,106,0.06)';
+    banner.style.borderColor = 'rgba(255,77,106,0.3)';
+    icon.style.background = 'var(--danger)';
+    title.textContent = 'MODO REAL — DINERO ACTIVO';
+    title.style.color = 'var(--danger)';
+    sub.textContent = 'Las apuestas se ejecutan en Polymarket con tu wallet';
+    btn.textContent = '📄 VOLVER A PAPER';
+    btn.style.background = 'rgba(245,166,35,0.1)';
+    btn.style.border = '1px solid rgba(245,166,35,0.3)';
+    btn.style.color = 'var(--warn)';
+    if (state.walletAddress) {
+      chip.style.display = 'block';
+      chip.textContent = state.walletAddress.slice(0,6) + '...' + state.walletAddress.slice(-4);
+    }
+    badge.textContent = 'FASE 2 · REAL 🔴';
+    badge.style.color = 'var(--danger)';
+    badge.style.borderColor = 'rgba(255,77,106,0.4)';
+    badge.style.background = 'rgba(255,77,106,0.1)';
+    document.getElementById('betsTitle').textContent = 'Apuestas Reales';
+    document.getElementById('betsSub').textContent = 'Ejecutadas en Polymarket via MetaMask';
+  }
+}
+
+function updateBetButton(marketId, betSize) {
+  const btn = document.getElementById('placeBtn-' + marketId);
+  if (!btn) return;
+  const isPaper = state.executionMode === 'paper';
+  if (isPaper) {
+    btn.textContent = `📄 PAPER BET — $${betSize.toFixed(2)}`;
+    btn.style.background = 'rgba(245,166,35,0.15)';
+    btn.style.border = '1px solid rgba(245,166,35,0.4)';
+    btn.style.color = 'var(--warn)';
+  } else {
+    btn.textContent = `🔴 APOSTAR REAL — $${betSize.toFixed(2)} USDC`;
+    btn.style.background = 'rgba(255,77,106,0.15)';
+    btn.style.border = '1px solid rgba(255,77,106,0.4)';
+    btn.style.color = 'var(--danger)';
+  }
+}
+
+// ── Mode Switch Modal ──────────────────────────────────
+function showModeSwitch() {
+  if (state.executionMode === 'real') {
+    // Switch back to paper — no confirmation needed
+    state.executionMode = 'paper';
+    updateModeUI();
+    persist();
+    log('Modo cambiado a PAPER TRADING', 'warn');
+    return;
+  }
+  // Switch to real — show confirmation modal
+  document.getElementById('modeModal').style.display = 'flex';
+}
+
+function closeModeModal() {
+  document.getElementById('modeModal').style.display = 'none';
+}
+
+async function connectWalletAndActivate() {
+  const btn = document.getElementById('connectWalletBtn');
+  btn.textContent = 'Conectando...';
+  btn.disabled = true;
+  try {
+    if (!window.ethereum) throw new Error('MetaMask no detectado. Instala la extensión.');
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || accounts.length === 0) throw new Error('No se obtuvo cuenta de MetaMask');
+    state.walletAddress = accounts[0];
+    // Switch to Polygon (Polymarket runs on Polygon)
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x89' }], // Polygon mainnet
+      });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x89',
+            chainName: 'Polygon Mainnet',
+            nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+            rpcUrls: ['https://polygon-rpc.com/'],
+            blockExplorerUrls: ['https://polygonscan.com/'],
+          }],
+        });
+      }
+    }
+    state.executionMode = 'real';
+    closeModeModal();
+    updateModeUI();
+    persist();
+    log('Wallet conectada: ' + state.walletAddress, 'accent');
+    log('Modo REAL activado — apuestas se ejecutan en Polymarket', 'err');
+  } catch (e) {
+    log('Error wallet: ' + e.message, 'err');
+    btn.textContent = 'Error: ' + e.message.slice(0, 40);
+    btn.disabled = false;
+    setTimeout(() => {
+      btn.textContent = 'Conectar MetaMask y Activar Real';
+      btn.disabled = false;
+    }, 3000);
+  }
+}
+
+// ── Place Bet ──────────────────────────────────────────
+async function placeBet(marketId, betSize, odds, question) {
+  const btn = document.getElementById('placeBtn-' + marketId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
+
+  const market = state.markets.find(m => m.id == marketId);
+  const isPaper = state.executionMode === 'paper';
+
+  if (isPaper) {
+    await executePaperBet(marketId, betSize, odds, question, market);
+  } else {
+    await executeRealBet(marketId, betSize, odds, question, market);
+  }
+
+  if (btn) { btn.disabled = false; updateBetButton(marketId, betSize); }
+}
+
+// ── Paper Execution ────────────────────────────────────
+async function executePaperBet(marketId, betSize, odds, question, market) {
+  if (betSize > state.paperBankroll) {
+    log('Paper bet rechazada — fondos insuficientes', 'err');
+    return;
+  }
+  const bet = {
+    id: 'paper_' + Date.now(),
+    marketId,
+    question,
+    sport: market?.sport || 'fut',
+    mode: 'paper',
+    amount: betSize,
+    odds,
+    potentialPayout: betSize / odds,
+    status: 'open',
+    pnl: null,
+    ts: Date.now(),
+    endDate: market?.endDate || null,
+    txHash: null,
+  };
+  state.bets.unshift(bet);
+  state.paperBankroll -= betSize;
+  state.bankroll = state.paperBankroll;
+  updateUI();
+  renderBets();
+  persist();
+  log(`PAPER BET — $${betSize.toFixed(2)} en "${question.slice(0,50)}..." @ ${(odds*100).toFixed(1)}%`, 'warn');
+  showBetsTab();
+}
+
+// ── Real Execution (Polymarket CLOB API) ───────────────
+async function executeRealBet(marketId, betSize, odds, question, market) {
+  log('Iniciando apuesta real en Polymarket...', 'err');
+  try {
+    if (!window.ethereum || !state.walletAddress) throw new Error('Wallet no conectada');
+
+    // Step 1: Get CLOB API approval/nonce
+    const clobBase = WORKERS.polymarket || 'https://clob.polymarket.com';
+
+    // Step 2: Build order
+    const side = 'BUY';   // buying YES shares
+    const price = odds;   // price in USDC (0-1)
+    const size  = (betSize / odds).toFixed(2); // number of shares
+
+    // Step 3: Sign the order with MetaMask (EIP-712)
+    const domain = {
+      name: 'Polymarket CTF Exchange',
+      version: '1',
+      chainId: 137, // Polygon
+    };
+    const orderTypes = {
+      Order: [
+        { name: 'salt',       type: 'uint256' },
+        { name: 'maker',      type: 'address' },
+        { name: 'signer',     type: 'address' },
+        { name: 'taker',      type: 'address' },
+        { name: 'tokenId',    type: 'uint256' },
+        { name: 'makerAmount',type: 'uint256' },
+        { name: 'takerAmount',type: 'uint256' },
+        { name: 'expiration', type: 'uint256' },
+        { name: 'nonce',      type: 'uint256' },
+        { name: 'feeRateBps', type: 'uint256' },
+        { name: 'side',       type: 'uint8'   },
+        { name: 'signatureType', type: 'uint8' },
+      ],
+    };
+
+    const salt   = Math.floor(Math.random() * 1e15).toString();
+    const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+    const tokenId = market?.raw?.clobTokenIds?.[0] || market?.raw?.tokens?.[0]?.token_id || '0';
+    const makerAmt = Math.round(betSize * 1e6).toString();   // USDC has 6 decimals
+    const takerAmt = Math.round(parseFloat(size) * 1e6).toString();
+
+    const orderData = {
+      salt, maker: state.walletAddress, signer: state.walletAddress,
+      taker: '0x0000000000000000000000000000000000000000',
+      tokenId, makerAmount: makerAmt, takerAmount: takerAmt,
+      expiration: expiry.toString(), nonce: '0', feeRateBps: '0',
+      side: side === 'BUY' ? 0 : 1, signatureType: 0,
+    };
+
+    log('Solicitando firma a MetaMask...', 'warn');
+    const signature = await window.ethereum.request({
+      method: 'eth_signTypedData_v4',
+      params: [state.walletAddress, JSON.stringify({ domain, types: orderTypes, primaryType: 'Order', message: orderData })],
+    });
+
+    // Step 4: Submit signed order via proxy Worker
+    const orderPayload = { order: { ...orderData, signature }, owner: state.walletAddress, orderType: 'GTC' };
+    const res = await fetch(`${clobBase}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderPayload),
+    });
+    const result = await res.json();
+
+    if (!res.ok || result.error) throw new Error(result.error || result.errorMsg || 'Order rejected');
+
+    const bet = {
+      id: result.orderID || 'real_' + Date.now(),
+      marketId, question,
+      sport: market?.sport || 'fut',
+      mode: 'real',
+      amount: betSize,
+      odds,
+      potentialPayout: parseFloat(size),
+      status: 'open',
+      pnl: null,
+      ts: Date.now(),
+      endDate: market?.endDate || null,
+      txHash: result.transactionHash || result.orderID || null,
+    };
+    state.bets.unshift(bet);
+    state.realBankroll = Math.max(0, state.realBankroll - betSize);
+    renderBets();
+    persist();
+    log(`REAL BET COLOCADA — $${betSize.toFixed(2)} USDC en "${question.slice(0,40)}..." OrderID: ${bet.id.slice(0,12)}`, 'err');
+    showBetsTab();
+  } catch (e) {
+    log('Error apuesta real: ' + e.message, 'err');
+  }
+}
+
+function showBetsTab() {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-bets').classList.add('active');
+  const tabs = document.querySelectorAll('.nav-tab');
+  tabs.forEach(t => { if (t.textContent === 'APUESTAS') t.classList.add('active'); });
+}
+
+// ── Render Bets Table ──────────────────────────────────
+let betsFilter = 'all';
+function filterBets(f) {
+  betsFilter = f;
+  ['all','open','won','lost'].forEach(k => {
+    const b = document.getElementById('bf-' + k);
+    if (b) b.style.opacity = k === f ? '1' : '0.45';
+  });
+  renderBets();
+}
+
+function renderBets() {
+  const tbody = document.getElementById('betsBody');
+  if (!tbody) return;
+  let bets = state.bets;
+  if (betsFilter === 'open') bets = bets.filter(b => b.status === 'open');
+  if (betsFilter === 'won')  bets = bets.filter(b => b.status === 'won');
+  if (betsFilter === 'lost') bets = bets.filter(b => b.status === 'lost');
+
+  if (!bets.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">Sin apuestas en esta categoría.</td></tr>';
+  } else {
+    tbody.innerHTML = bets.map(b => {
+      const statusColor = { open:'var(--warn)', won:'var(--accent)', lost:'var(--danger)' }[b.status] || 'var(--text2)';
+      const pnlVal = b.pnl !== null ? (b.pnl >= 0 ? '+$' : '-$') + Math.abs(b.pnl).toFixed(2) : '—';
+      const pnlColor = b.pnl === null ? 'var(--text3)' : b.pnl >= 0 ? 'var(--accent)' : 'var(--danger)';
+      const modeLabel = b.mode === 'paper' ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:rgba(245,166,35,0.1);color:var(--warn);border:1px solid rgba(245,166,35,0.2)">PAPER</span>'
+                                           : '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:rgba(255,77,106,0.1);color:var(--danger);border:1px solid rgba(255,77,106,0.2)">REAL</span>';
+      const dateStr = new Date(b.ts).toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const txLink = b.txHash ? `<a href="https://polygonscan.com/tx/${b.txHash}" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--info)">${b.txHash.slice(0,8)}...</a>` : '—';
+      const canResolve = b.status === 'open' && b.mode === 'paper';
+      return `<tr>
+        <td style="max-width:200px;font-size:12px">${b.question.slice(0,65)}${b.question.length>65?'...':''}</td>
+        <td><span class="sport-badge sport-${b.sport}">${sportLabel(b.sport)}</span></td>
+        <td>${modeLabel}</td>
+        <td style="font-family:var(--mono)">${b.amount.toFixed(2)}</td>
+        <td style="font-family:var(--mono)">${(b.odds*100).toFixed(1)}%</td>
+        <td style="font-family:var(--mono);color:${statusColor}">${b.status.toUpperCase()}</td>
+        <td style="font-family:var(--mono);color:${pnlColor}">${pnlVal}</td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${dateStr}</td>
+        <td>${canResolve ? `<button class="btn-analyze" onclick="resolveModal('${b.id}')">RESOLVER</button>` : txLink}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Update KPIs
+  const all = state.bets;
+  const open = all.filter(b => b.status === 'open').length;
+  const resolved = all.filter(b => b.status !== 'open');
+  const won = all.filter(b => b.status === 'won').length;
+  const wr = resolved.length ? Math.round(won / resolved.length * 100) + '%' : '—';
+  const pnl = all.reduce((s, b) => s + (b.pnl || 0), 0);
+  document.getElementById('betsTotalCount').textContent = all.length;
+  document.getElementById('betsOpenCount').textContent = open;
+  document.getElementById('betsWinRate').textContent = wr;
+  document.getElementById('betsPnl').textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+  document.getElementById('betsPnl').className = 'metric-value ' + (pnl >= 0 ? 'up' : 'down');
+}
+
+// ── Resolve Paper Bet ──────────────────────────────────
+function resolveModal(betId) {
+  const bet = state.bets.find(b => b.id === betId);
+  if (!bet) return;
+  document.getElementById('resolveModal').style.display = 'flex';
+  document.getElementById('resolveModalTitle').textContent = bet.question.slice(0, 70) + '...';
+  document.getElementById('resolveModalAmount').textContent = '$' + bet.amount.toFixed(2) + ' @ ' + (bet.odds * 100).toFixed(1) + '%';
+  document.getElementById('resolveWonBtn').onclick  = () => resolveBet(betId, true);
+  document.getElementById('resolveLostBtn').onclick = () => resolveBet(betId, false);
+}
+
+function closeResolveModal() {
+  document.getElementById('resolveModal').style.display = 'none';
+}
+
+function resolveBet(betId, won) {
+  const bet = state.bets.find(b => b.id === betId);
+  if (!bet) return;
+  closeResolveModal();
+  if (won) {
+    const payout = bet.potentialPayout || (bet.amount / bet.odds);
+    bet.pnl = payout - bet.amount;
+    bet.status = 'won';
+    state.paperBankroll += payout;
+    state.bankroll = state.paperBankroll;
+    log(`BET GANADA — +$${bet.pnl.toFixed(2)} en "${bet.question.slice(0,40)}..."`, 'accent');
+  } else {
+    bet.pnl = -bet.amount;
+    bet.status = 'lost';
+    log(`BET PERDIDA — -$${bet.amount.toFixed(2)} en "${bet.question.slice(0,40)}..."`, 'err');
+  }
+  updateUI();
+  renderBets();
+  persist();
+}
+
+// ── Init Phase 2 UI ────────────────────────────────────
+// updateModeUI and renderBets are called explicitly where needed
+// No wrapper needed — avoids recursion issues
+
 </script>
 </body>
 </html>
