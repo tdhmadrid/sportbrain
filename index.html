@@ -791,6 +791,7 @@
               <tr>
                 <th>EVENTO</th>
                 <th>DEPORTE</th>
+                <th>CIERRA</th>
                 <th>ODDS POLY</th>
                 <th>PROB REAL</th>
                 <th>EV</th>
@@ -1178,7 +1179,13 @@ function clearLog() {
 }
 
 // ─── MARKETS ──────────────────────────────────────────
-const POLYMARKET_SPORTS_TAGS = ['sports', 'soccer', 'nba', 'nfl', 'nhl', 'tennis', 'mlb', 'baseball', 'basketball', 'football', 'golf', 'mma', 'ufc', 'boxing', 'formula', 'racing', 'cricket', 'rugby', 'volleyball', 'olympics'];
+const POLYMARKET_SPORTS_TAGS = ['sports','soccer','nba','nfl','nhl','tennis','mlb','baseball','basketball','football','golf','mma','ufc','boxing','formula1','racing','cricket','rugby','champions-league','premier-league','la-liga','serie-a','bundesliga','ligue-1','mls'];
+
+// Keywords that indicate a LIVE MATCH result (short-term, this week)
+const MATCH_KEYWORDS = /\b(win|beat|defeat|score|advance|qualify|champion|title|final|semifinal|quarterfinal|match|game|series|vs\.?|v\s|at\s|\bfc\b|\bsc\b|\bac\b|\bif\b|\bcf\b|\butd\b|\bCity\b|\bUnited\b|\bReal\b|\bBarça\b|\bMadrid\b|\bBarcelona\b|\bAtlético\b|\bLakers\b|\bCeltics\b|\bWarriors\b|\bNuggets\b|\bHeat\b|\bBulls\b|\bKnicks\b|\bBucks\b|\bChiefs\b|\bEagles\b|\bPatriots\b|\bCowboys\b|\bYankees\b|\bDodgers\b|\bAstros\b|\bMets\b|\bopen\b|\bGP\b|\bgrand prix\b|\bUFC\b|\bfight\b)/i;
+
+// Keywords that disqualify a market (seasonal, non-match, too long term)
+const EXCLUDE_KEYWORDS = /\b(season|championship season|finish season|end of season|award|MVP|all-star|draft pick|hall of fame|transfer|contract|retire|sign|trade|salary|net worth|stock|price|above|below|\$|Netflix|crypto|bitcoin|president|election|market cap|revenue|earnings)\b/i;
 
 async function fetchMarkets() {
   if (state.demo) { loadDemoMarkets(); return; }
@@ -1191,7 +1198,7 @@ async function fetchMarkets() {
     // Polymarket CLOB API — markets endpoint (public, no auth needed para leer)
     const polyBase = WORKERS.polymarket || 'https://gamma-api.polymarket.com';
     const res = await fetch(
-      `${polyBase}/markets?closed=false&limit=100&order=volume&ascending=false`
+      `${polyBase}/markets?closed=false&limit=200&order=volume&ascending=false`
     );
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
@@ -1209,14 +1216,33 @@ async function fetchMarkets() {
 
     const allMarkets = Array.isArray(data) ? data : (data.markets || data.data || []);
 
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
     state.markets = allMarkets.filter(m => {
       if (!m || !m.question) return false;
-      const q = (m.question || '').toLowerCase();
-      const tags = (m.tags || []).map(t => (typeof t === 'string' ? t : (t.slug || t.label || t.id || '')).toLowerCase());
+
+      // ── Date filter: only markets closing within 7 days ──
+      const endRaw = m.endDate || m.end_date || m.endDateIso || null;
+      if (endRaw) {
+        const endTs = new Date(endRaw).getTime();
+        if (isNaN(endTs) || endTs < now || endTs > now + sevenDays) return false;
+      }
+
+      const q = m.question || '';
+
+      // ── Exclude non-sports / long-term markets ──
+      if (EXCLUDE_KEYWORDS.test(q)) return false;
+
+      // ── Must match sport tags OR look like a match result question ──
+      const tags = (m.tags || []).map(t =>
+        (typeof t === 'string' ? t : (t.slug || t.label || t.id || '')).toLowerCase()
+      );
       const tagMatch = tags.some(t => POLYMARKET_SPORTS_TAGS.some(st => t.includes(st)));
-      const qMatch = /soccer|nba|nfl|nhl|tennis|mlb|football|basketball|sport|match|draft|champion|league|cup|series|game|playoff|super bowl|world cup|grand slam/i.test(q);
-      return tagMatch || qMatch;
-    }).slice(0, 25).map(m => {
+      const matchQ   = MATCH_KEYWORDS.test(q);
+
+      return tagMatch || matchQ;
+    }).slice(0, 30).map(m => {
       // Robust price extraction — Polymarket has changed their API format multiple times
       let odds = 0.5;
       if (m.outcomePrices) {
@@ -1253,7 +1279,8 @@ async function fetchMarkets() {
 
     renderMarkets();
     document.getElementById('activeMarkets').textContent = state.markets.length;
-    log(`${state.markets.length} mercados deportivos cargados (de ${allMarkets.length} totales)`, 'accent');
+    const withDate = allMarkets.filter(m => m.endDate || m.end_date).length;
+    log(`${state.markets.length} partidos esta semana (de ${allMarkets.length} totales, ${withDate} con fecha)`, 'accent');
   } catch (e) {
     log('Error Polymarket API: ' + e.message + ' — cargando demo', 'err');
     loadDemoMarkets();
@@ -1263,12 +1290,13 @@ async function fetchMarkets() {
 }
 
 function detectSport(q) {
-  q = (q || '').toLowerCase();
-  if (/soccer|football|laliga|premier|champions|uefa|fifa|goal|match/i.test(q)) return 'fut';
-  if (/nba|basketball|lakers|celtics|warriors|knicks/i.test(q)) return 'nba';
-  if (/nfl|patriots|cowboys|chiefs|eagles|super bowl/i.test(q)) return 'nfl';
-  if (/tennis|djokovic|nadal|federer|alcaraz|slam|wimbledon/i.test(q)) return 'ten';
-  if (/mlb|baseball|yankees|dodgers|world series/i.test(q)) return 'mlb';
+  if (!q) return 'fut';
+  if (/\bnba\b|basketball|lakers|celtics|warriors|knicks|nuggets|bucks|heat|bulls|nets|suns|clippers|spurs|mavs|thunder|blazers|hawks|76ers|pacers|hornets|magic|pistons|cavs|raptors|grizzlies|pelicans|timberwolves|jazz|kings|rockets|wizards/i.test(q)) return 'nba';
+  if (/\bnfl\b|patriots|cowboys|chiefs|eagles|ravens|steelers|packers|49ers|broncos|seahawks|rams|bills|chargers|colts|titans|jaguars|texans|bears|vikings|lions|falcons|saints|buccaneers|panthers|cardinals|giants|jets|raiders|dolphins|bengals|browns|commanders/i.test(q)) return 'nfl';
+  if (/\bmlb\b|baseball|yankees|dodgers|astros|mets|cubs|sox|braves|giants|cardinals|phillies|padres|mariners|reds|pirates|tigers|royals|twins|athletics|blue jays|orioles|rays|world series/i.test(q)) return 'mlb';
+  if (/tennis|djokovic|alcaraz|sinner|medvedev|zverev|nadal|federer|slam|wimbledon|roland garros|us open|australian open|atp|wta|open bnp|masters 1000/i.test(q)) return 'ten';
+  if (/laliga|la liga|premier|champions|bundesliga|serie a|ligue 1|europa|mls|copa|euro|world cup|fifa|uefa|soccer|fc |united|real madrid|barcelona|atletico|city|arsenal|chelsea|liverpool|tottenham|inter|milan|juventus|psg|dortmund|atletico|ajax|porto|benfica|celtic|rangers/i.test(q)) return 'fut';
+  if (/\bnhl\b|hockey|stanley cup|maple leafs|canadiens|bruins|rangers|penguins|blackhawks|blues|sharks|oilers|flames|canucks|senators|sabres|flyers|capitals|lightning|panthers|hurricanes|predators|stars|avalanche|ducks|kings|coyotes|jets|wild|jackets|isles/i.test(q)) return 'nfl'; // reuse nfl badge for now
   return 'fut';
 }
 
@@ -1315,6 +1343,7 @@ function renderMarkets() {
         <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px">Vol: $${(m.volume/1000).toFixed(0)}k</div>
       </td>
       <td><span class="sport-badge sport-${m.sport}">${sportLabel(m.sport)}</span></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--warn)">${fmtDate(m.endDate)}</td>
       <td style="font-family:var(--mono);font-size:13px">${(m.polyOdds*100).toFixed(1)}%</td>
       <td style="font-family:var(--mono);font-size:13px;color:var(--info)">${(realProb*100).toFixed(1)}%</td>
       <td style="font-family:var(--mono);font-size:13px;color:${evColor}">${evNum > 0 ? '+' : ''}${ev}%</td>
@@ -1594,6 +1623,20 @@ function updateSportLimit(sport, val) {
 
 // ─── UTILS ────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '—';
+  const now = new Date();
+  const diff = dt - now;
+  const days = Math.floor(diff / 86400000);
+  const hrs  = Math.floor((diff % 86400000) / 3600000);
+  if (diff < 0) return 'CERRADO';
+  if (days === 0) return hrs + 'h';
+  if (days === 1) return '1d ' + hrs + 'h';
+  return days + 'd';
+}
 </script>
 </body>
 </html>
