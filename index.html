@@ -1378,37 +1378,34 @@ async function fetchMarkets() {
   try {
     log('Cargando mercados deportivos...', 'accent');
 
-    // ── Use the Worker's clean /sportsbrain/live endpoint ──────────────
-    // This endpoint filters server-side: sports only, 4-day window, valid odds
-    const res = await fetch(`${polyBase}/sportsbrain/live`);
+    // Try new Worker endpoint first, fall back to legacy automatically
+    let usedNewEndpoint = false;
+    try {
+      const res = await fetch(`${polyBase}/sportsbrain/live`);
+      if (res.ok) {
+        const payload = await res.json();
+        if (payload.ok && payload.markets && payload.markets.length > 0) {
+          state.markets = payload.markets.map(m => ({
+            id: m.id, question: m.question, eventTitle: m.eventTitle || '',
+            sport: m.sport || detectSport(m.question), polyOdds: m.polyOdds,
+            volume: m.volume, endDate: m.endDate, isLive: m.isLive,
+            conditionId: m.conditionId, clobTokenIds: m.clobTokenIds, raw: m,
+          }));
+          renderMarkets();
+          document.getElementById('activeMarkets').textContent = state.markets.length;
+          log(`✓ ${payload.live} LIVE + ${payload.upcoming} próximos = ${payload.total} partidos`, 'accent');
+          usedNewEndpoint = true;
+        }
+      }
+    } catch(e) { /* silent — fallback below */ }
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
-
-    if (!payload.ok && payload.error) throw new Error(payload.error);
-
-    state.markets = (payload.markets || []).map(m => ({
-      id:        m.id,
-      question:  m.question,
-      eventTitle: m.eventTitle || '',
-      sport:     m.sport || detectSport(m.question),
-      polyOdds:  m.polyOdds,
-      volume:    m.volume,
-      endDate:   m.endDate,
-      isLive:    m.isLive,
-      conditionId:  m.conditionId,
-      clobTokenIds: m.clobTokenIds,
-      raw: m,
-    }));
-
-    renderMarkets();
-    document.getElementById('activeMarkets').textContent = state.markets.length;
-    log(`✓ ${payload.live} LIVE + ${payload.upcoming} próximos = ${payload.total} partidos`, 'accent');
+    if (!usedNewEndpoint) {
+      await fetchMarketsLegacy();
+    }
 
   } catch(e) {
     log(`Error: ${e.message}`, 'err');
-    // If worker not updated yet, fallback to direct filtering
-    await fetchMarketsLegacy();
+    loadDemoMarkets();
   }
   btn.disabled = false;
   btn.textContent = '↻ ACTUALIZAR';
