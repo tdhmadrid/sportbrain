@@ -1802,7 +1802,7 @@ function saveToHistory(market, analysis, betSize) {
     sport: market.sport,
     verdict: analysis.verdict,
     confidence: analysis.confidence,
-    betSize: betSize,
+    betSize: betSize || 0,
     polyOdds: market.polyOdds,
     result: null // null = pending
   };
@@ -1827,7 +1827,7 @@ function renderHistory() {
   const div = document.getElementById('historyBody');
   if (!state.history.length) return;
   div.innerHTML = state.history.slice(0, 20).map(h => {
-    const verdictColor = { BET: 'var(--accent)', PASS: 'var(--danger)', WATCH: 'var(--warn)' }[h.verdict] || 'var(--text2)';
+    const verdictColor = { BET: 'var(--accent)', LAY: 'var(--info)', PASS: 'var(--danger)', WATCH: 'var(--warn)' }[h.verdict] || 'var(--text2)';
     const date = new Date(h.ts).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     return `<div class="learning-entry">
       <div class="learning-entry-header">
@@ -1837,7 +1837,7 @@ function renderHistory() {
       </div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${h.question.slice(0,80)}...</div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
-        Confianza: ${h.confidence} | Poly: ${(h.polyOdds*100).toFixed(1)}% | Apuesta: $${h.betSize.toFixed(2)}
+        Confianza: ${h.confidence||'—'} | Poly: ${h.polyOdds ? (h.polyOdds*100).toFixed(1)+'%' : '—'} | Apuesta: $${h.betSize ? h.betSize.toFixed(2) : '0.00'}
       </div>
     </div>`;
   }).join('');
@@ -2231,7 +2231,7 @@ function renderBets() {
         <td><span class="sport-badge sport-${b.sport}">${sportLabel(b.sport)}</span></td>
         <td>${modeLabel}</td>
         <td><span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:${b.side==='NO'?'rgba(59,158,255,0.1)':'rgba(0,229,160,0.1)'};color:${b.side==='NO'?'var(--info)':'var(--accent)'};border:1px solid ${b.side==='NO'?'rgba(59,158,255,0.25)':'rgba(0,229,160,0.2)'}">${b.side||'YES'}</span></td>
-        <td style="font-family:var(--mono)">${b.amount.toFixed(2)}</td>
+        <td style="font-family:var(--mono)">${(b.amount||0).toFixed(2)}</td>
         <td style="font-family:var(--mono)">${(b.odds*100).toFixed(1)}%</td>
         <td style="font-family:var(--mono);color:${statusColor}">${b.status.toUpperCase()}</td>
         <td style="font-family:var(--mono);color:${pnlColor}">${pnlVal}</td>
