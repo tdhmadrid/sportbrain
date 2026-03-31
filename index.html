@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+, '${best.side}')<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -485,6 +485,7 @@
   .verdict-bet { background: rgba(0,229,160,0.15); color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
   .verdict-pass { background: rgba(255,77,106,0.12); color: var(--danger); border: 1px solid rgba(255,77,106,0.25); }
   .verdict-watch { background: rgba(245,166,35,0.12); color: var(--warn); border: 1px solid rgba(245,166,35,0.25); }
+  .verdict-lay { background: rgba(59,158,255,0.12); color: var(--info); border: 1px solid rgba(59,158,255,0.3); }
 
   /* LEARNING TAB */
   .learning-entry {
@@ -1143,6 +1144,7 @@
             <th>MERCADO</th>
             <th>DEPORTE</th>
             <th>MODO</th>
+            <th>LADO</th>
             <th>MONTO</th>
             <th>ODDS</th>
             <th>ESTADO</th>
@@ -1579,12 +1581,28 @@ function estimateRealProb(m) {
 }
 
 function calcEV(polyOdds, realProb) {
-  // EV = (prob_win * payout) - (prob_lose * stake)
-  // On Polymarket: if you buy YES at price p, payout is (1/p - 1) if win
   if (!polyOdds || polyOdds <= 0 || polyOdds >= 1) return 0;
-  const payoutIfWin = (1 / polyOdds) - 1;
-  const ev = realProb * payoutIfWin - (1 - realProb);
-  return ev * 100; // as percentage
+  // YES EV: buy YES at polyOdds, win if event happens
+  const evYes = realProb * ((1 / polyOdds) - 1) - (1 - realProb);
+  return evYes * 100;
+}
+
+function calcLayEV(polyOdds, realProb) {
+  if (!polyOdds || polyOdds <= 0 || polyOdds >= 1) return 0;
+  // LAY EV: buy NO at (1 - polyOdds), win if event does NOT happen
+  const noPrice = 1 - polyOdds;
+  const probNoHappens = 1 - realProb;
+  const evNo = probNoHappens * ((1 / noPrice) - 1) - realProb;
+  return evNo * 100;
+}
+
+function getBestSide(polyOdds, realProb) {
+  const evYes = calcEV(polyOdds, realProb);
+  const evNo  = calcLayEV(polyOdds, realProb);
+  if (evYes >= evNo && evYes > 2)  return { side: 'YES', ev: evYes, odds: polyOdds };
+  if (evNo  >  evYes && evNo  > 2) return { side: 'NO',  ev: evNo,  odds: 1 - polyOdds };
+  if (evYes > 0 || evNo > 0) return { side: evYes >= evNo ? 'YES' : 'NO', ev: Math.max(evYes, evNo), odds: evYes >= evNo ? polyOdds : 1 - polyOdds };
+  return { side: 'NONE', ev: Math.max(evYes, evNo), odds: polyOdds };
 }
 
 // ─── LLM ANALYSIS ─────────────────────────────────────
@@ -1593,8 +1611,12 @@ async function analyzeMarket(id) {
   if (!market) return;
 
   const realProb = estimateRealProb(market);
-  const ev = calcEV(market.polyOdds, realProb).toFixed(2);
-  const kellyFull = Math.max(0, (realProb - market.polyOdds) / (1 - market.polyOdds));
+  const best = getBestSide(market.polyOdds, realProb);
+  const ev = best.ev.toFixed(2);
+  // Kelly on best side
+  const kellyFull = Math.max(0, (best.side === 'NO'
+    ? ((1 - realProb) - (1 - market.polyOdds)) / market.polyOdds
+    : (realProb - market.polyOdds) / (1 - market.polyOdds)));
   const kellyFrac = kellyFull * state.kellyFactor;
   const betSize = Math.min(kellyFrac * state.bankroll, state.bankroll * (state.sportLimits[market.sport] / 100));
 
@@ -1618,22 +1640,31 @@ async function analyzeMarket(id) {
 
 MERCADO: "${market.question}"
 DEPORTE: ${market.sport.toUpperCase()}
-ODDS POLYMARKET: ${(market.polyOdds * 100).toFixed(1)}% (probabilidad implícita del mercado)
-PROBABILIDAD ESTIMADA REAL: ${(realProb * 100).toFixed(1)}%
-EXPECTED VALUE: ${ev}%
+PRECIO YES en Polymarket: ${(market.polyOdds * 100).toFixed(1)}%
+PRECIO NO  en Polymarket: ${((1-market.polyOdds) * 100).toFixed(1)}%
+PROBABILIDAD REAL ESTIMADA (evento ocurra): ${(realProb * 100).toFixed(1)}%
+EV comprando YES: ${calcEV(market.polyOdds, realProb).toFixed(1)}%
+EV comprando NO:  ${calcLayEV(market.polyOdds, realProb).toFixed(1)}%
+MEJOR LADO DETECTADO: ${best.side} (EV: ${best.ev.toFixed(1)}%)
 VOLUMEN: $${(market.volume / 1000).toFixed(0)}k
 KELLY FRACCIONADO (${(state.kellyFactor*100).toFixed(0)}%): ${(kellyFrac * 100).toFixed(2)}% del bankroll
-TAMAÑO DE APUESTA SUGERIDO: $${betSize.toFixed(2)} de $${state.bankroll.toFixed(2)} bankroll
+TAMAÑO APUESTA SUGERIDO: $${betSize.toFixed(2)} de $${state.bankroll.toFixed(2)} bankroll
 
 Proporciona en JSON:
 {
-  "verdict": "BET" | "PASS" | "WATCH",
+  "verdict": "BET" | "LAY" | "PASS" | "WATCH",
   "confidence": 0-100,
-  "reasoning": "2-3 oraciones explicando tu decisión considerando el EV, riesgo y contexto deportivo",
+  "reasoning": "2-3 oraciones explicando tu decisión. BET = comprar YES porque mercado subestima probabilidad. LAY = comprar NO porque mercado sobreestima probabilidad.",
   "risk_factors": "principales riesgos de esta apuesta",
   "key_insight": "el insight más importante sobre este mercado",
   "adjusted_prob": número entre 0 y 1 con tu estimación de probabilidad real
 }
+
+Reglas de decisión:
+- BET (comprar YES): tu adjusted_prob > polymarket odds + 5%
+- LAY (comprar NO): tu adjusted_prob < polymarket odds - 5%
+- WATCH: diferencia entre 2-5%, monitorear
+- PASS: sin edge claro o mercado con muy poco volumen
 
 Responde SOLO con el JSON, sin markdown ni texto adicional.`;
 
@@ -1670,7 +1701,7 @@ Responde SOLO con el JSON, sin markdown ni texto adicional.`;
 function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
   document.getElementById('aiThinking').classList.remove('visible');
   const content = document.getElementById('analysisContent');
-  const verdictClass = { BET: 'verdict-bet', PASS: 'verdict-pass', WATCH: 'verdict-watch' }[analysis.verdict] || 'verdict-watch';
+  const verdictClass = { BET: 'verdict-bet', LAY: 'verdict-lay', PASS: 'verdict-pass', WATCH: 'verdict-watch' }[analysis.verdict] || 'verdict-watch';
   const confColor = analysis.confidence >= 70 ? 'var(--accent)' : analysis.confidence >= 50 ? 'var(--warn)' : 'var(--danger)';
 
   content.innerHTML = `
@@ -1731,9 +1762,9 @@ function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
       <div class="analysis-text">${analysis.risk_factors}</div>
     </div>` : ''}
 
-    ${(analysis.verdict === 'BET' && betSize > 0) ? `
+    ${((analysis.verdict === 'BET' || analysis.verdict === 'LAY') && betSize > 0) ? `
     <div id="placeBetWrap-${market.id}" style="margin-top:4px">
-      <button onclick="placeBet('${market.id}', ${betSize.toFixed(4)}, ${market.polyOdds.toFixed(4)}, '${market.question.replace(/'/g,"\'").slice(0,80)}')"
+      <button onclick="placeBet('${market.id}', ${betSize.toFixed(4)}, ${best.odds.toFixed(4)}, '${market.question.replace(/'/g,"\'").slice(0,80)}', '${best.side}')"
         style="width:100%;padding:12px;border-radius:7px;font-family:var(--head);font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;letter-spacing:0.5px;border:none"
         id="placeBtn-${market.id}" class="place-bet-btn">
       </button>
@@ -1744,14 +1775,16 @@ function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
   `;
   content.classList.add('visible');
   // Style the bet button based on mode
-  updateBetButton(market.id, betSize);
+  updateBetButton(market.id, betSize, best.side);
 }
 
 function getDemoAnalysis(market, ev, betSize) {
   const evNum = parseFloat(ev);
+  const layEv = calcLayEV(market.polyOdds, estimateRealProb(market));
+  const verdict = evNum > 3 ? 'BET' : layEv > 3 ? 'LAY' : evNum > 0 ? 'WATCH' : 'PASS';
   return {
-    verdict: evNum > 3 ? 'BET' : evNum > 0 ? 'WATCH' : 'PASS',
-    confidence: evNum > 3 ? 72 : evNum > 0 ? 51 : 35,
+    verdict,
+    confidence: (evNum > 3 || layEv > 3) ? 72 : evNum > 0 ? 51 : 35,
     reasoning: `El mercado muestra un EV de ${ev}% con las probabilidades actuales de Polymarket. ${evNum > 2 ? 'La discrepancia entre la probabilidad implícita del mercado y la probabilidad estadística real sugiere una oportunidad de value betting.' : 'La probabilidad del mercado está bien alineada con los datos estadísticos disponibles.'}`,
     key_insight: `Volumen de $${(market.volume/1000).toFixed(0)}k indica ${market.volume > 300000 ? 'alta liquidez y mercado maduro' : 'mercado emergente con mayor ineficiencia potencial'}.`,
     risk_factors: `Deporte ${market.sport.toUpperCase()}: alta varianza inherente. No apostar más del ${state.sportLimits[market.sport]}% del bankroll. Tamaño sugerido: $${betSize.toFixed(2)}.`,
@@ -1926,17 +1959,20 @@ function updateModeUI() {
   }
 }
 
-function updateBetButton(marketId, betSize) {
+function updateBetButton(marketId, betSize, side) {
   const btn = document.getElementById('placeBtn-' + marketId);
   if (!btn) return;
+  side = side || btn.dataset.side || 'YES';
+  btn.dataset.side = side;
   const isPaper = state.executionMode === 'paper';
+  const sideLabel = side === 'NO' ? '📉 NO' : '📈 YES';
   if (isPaper) {
-    btn.textContent = `📄 PAPER BET — $${betSize.toFixed(2)}`;
-    btn.style.background = 'rgba(245,166,35,0.15)';
-    btn.style.border = '1px solid rgba(245,166,35,0.4)';
-    btn.style.color = 'var(--warn)';
+    btn.textContent = `📄 PAPER ${sideLabel} — $${betSize.toFixed(2)}`;
+    btn.style.background = side === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(245,166,35,0.15)';
+    btn.style.border     = side === 'NO' ? '1px solid rgba(255,77,106,0.35)' : '1px solid rgba(245,166,35,0.4)';
+    btn.style.color      = side === 'NO' ? 'var(--danger)' : 'var(--warn)';
   } else {
-    btn.textContent = `🔴 APOSTAR REAL — $${betSize.toFixed(2)} USDC`;
+    btn.textContent = `🔴 REAL ${sideLabel} — $${betSize.toFixed(2)} USDC`;
     btn.style.background = 'rgba(255,77,106,0.15)';
     btn.style.border = '1px solid rgba(255,77,106,0.4)';
     btn.style.color = 'var(--danger)';
@@ -2008,7 +2044,7 @@ async function connectWalletAndActivate() {
 }
 
 // ── Place Bet ──────────────────────────────────────────
-async function placeBet(marketId, betSize, odds, question) {
+async function placeBet(marketId, betSize, odds, question, side = 'YES') {
   const btn = document.getElementById('placeBtn-' + marketId);
   if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
 
@@ -2016,16 +2052,16 @@ async function placeBet(marketId, betSize, odds, question) {
   const isPaper = state.executionMode === 'paper';
 
   if (isPaper) {
-    await executePaperBet(marketId, betSize, odds, question, market);
+    await executePaperBet(marketId, betSize, odds, question, market, side);
   } else {
-    await executeRealBet(marketId, betSize, odds, question, market);
+    await executeRealBet(marketId, betSize, odds, question, market, side);
   }
 
   if (btn) { btn.disabled = false; updateBetButton(marketId, betSize); }
 }
 
 // ── Paper Execution ────────────────────────────────────
-async function executePaperBet(marketId, betSize, odds, question, market) {
+async function executePaperBet(marketId, betSize, odds, question, market, side = 'YES') {
   if (betSize > state.paperBankroll) {
     log('Paper bet rechazada — fondos insuficientes', 'err');
     return;
@@ -2036,6 +2072,7 @@ async function executePaperBet(marketId, betSize, odds, question, market) {
     question,
     sport: market?.sport || 'fut',
     mode: 'paper',
+    side: side,
     amount: betSize,
     odds,
     potentialPayout: betSize / odds,
@@ -2051,7 +2088,7 @@ async function executePaperBet(marketId, betSize, odds, question, market) {
   updateUI();
   renderBets();
   persist();
-  log(`PAPER BET — $${betSize.toFixed(2)} en "${question.slice(0,50)}..." @ ${(odds*100).toFixed(1)}%`, 'warn');
+  log(`PAPER BET ${side} — $${betSize.toFixed(2)} en "${question.slice(0,50)}..." @ ${(odds*100).toFixed(1)}%`, 'warn');
   showBetsTab();
 }
 
@@ -2191,6 +2228,7 @@ function renderBets() {
         <td style="max-width:200px;font-size:12px">${b.question.slice(0,65)}${b.question.length>65?'...':''}</td>
         <td><span class="sport-badge sport-${b.sport}">${sportLabel(b.sport)}</span></td>
         <td>${modeLabel}</td>
+        <td><span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:${b.side==='NO'?'rgba(59,158,255,0.1)':'rgba(0,229,160,0.1)'};color:${b.side==='NO'?'var(--info)':'var(--accent)'};border:1px solid ${b.side==='NO'?'rgba(59,158,255,0.25)':'rgba(0,229,160,0.2)'}">${b.side||'YES'}</span></td>
         <td style="font-family:var(--mono)">${b.amount.toFixed(2)}</td>
         <td style="font-family:var(--mono)">${(b.odds*100).toFixed(1)}%</td>
         <td style="font-family:var(--mono);color:${statusColor}">${b.status.toUpperCase()}</td>
