@@ -1,4 +1,4 @@
-, '${best.side}')<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1419,8 +1419,8 @@ async function fetchMarketsLegacy() {
   log('Fallback: consultando /markets directamente...', 'warn');
   try {
     const now = Date.now();
-    const fourDays = 4 * 24 * 3600 * 1000;
-    const res = await fetch(`${polyBase}/markets?active=true&closed=false&limit=300&order=endDate&ascending=true`);
+    const fourDays = 7 * 24 * 3600 * 1000;
+    const res = await fetch(`${polyBase}/markets?active=true&closed=false&limit=500&order=endDate&ascending=true`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const all = Array.isArray(data) ? data : [];
