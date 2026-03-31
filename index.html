@@ -1332,6 +1332,41 @@ const MATCH_KEYWORDS = /\b(win|beat|defeat|score|advance|qualify|champion|title|
 // Disqualify: non-match, long-term, individual tournament winners, exact scores
 const EXCLUDE_KEYWORDS = /\b(season|finish.*(season|year)|end.*(season|year)|award|MVP|all-star|all star|draft pick|draft order|hall of fame|transfer|contract|retire|sign|trade|salary|net worth|stock|price|above|below|\$[0-9]|Netflix|crypto|bitcoin|ethereum|president|election|market cap|revenue|earnings|approval|rating|poll|odds to win the|win the.*open|win the.*masters|win the.*pga|win the.*championship$|win the.*tournament|exact score|correct score|first goal|last goal|anytime|hattrick|hat-trick|yellow card|red card|corner|offside|assist|clean sheet|both teams|btts|over [0-9]|under [0-9]|handicap|spread|cover|ats\b)\b/i;
 
+// ── Sports tag slugs that Polymarket actually uses ──────
+const SPORTS_SLUGS = [
+  'sports','soccer','football','basketball','nba','nfl','nhl','mlb',
+  'tennis','mma','ufc','boxing','golf','baseball','hockey','rugby',
+  'cricket','esports','cycling','formula-1','f1','racing',
+  'champions-league','premier-league','la-liga','serie-a','bundesliga',
+  'ligue-1','mls','copa-america','world-cup','euros','uefa',
+  'ncaa','college-football','college-basketball'
+];
+
+// A question is a valid MATCH bet if it follows "Will X beat/win Y" pattern
+function isMatchQuestion(q) {
+  if (!q) return false;
+  // Must be a binary outcome question about a specific match
+  const matchPatterns = [
+    /will .+ (win|beat|defeat|score|advance|qualify|cover)/i,
+    /\b(win|beat|defeat)\b.+\bvs\.?\b/i,
+    /\bvs\.?\s+.+\?(win|beat|defeat|advance)/i,
+    /who wins? .+(game|match|series|fight|bout|race|set)/i,
+    /(game [0-9]|match [0-9]|leg [0-9]|round [0-9])/i,
+  ];
+  return matchPatterns.some(p => p.test(q));
+}
+
+// Hard exclusion — politics, finance, entertainment, season-long
+function isJunk(q, tags) {
+  if (!q) return true;
+  const junkWords = /\b(president|presidential|nominee|nomination|elect|election|congress|senate|biden|trump|kennedy|republican|democrat|liberal|conservative|crypto|bitcoin|ethereum|stock|price|above|below|market cap|revenue|earnings|oscar|grammy|emmy|award|mvp|all-star|season champion|win the.*season|finish.*season|nba champion 202|nfl champion 202|world series 202|stanley cup 202|super bowl 202[0-9]|transfer|contract|retire|sign for|move to)\b/i;
+  if (junkWords.test(q)) return true;
+  // Extra: if tags include politics/finance, skip
+  const junkTags = ['politics','finance','crypto','entertainment','culture','business','economics','law','science','technology','world'];
+  if (tags && tags.some(t => junkTags.some(j => t.includes(j)))) return true;
+  return false;
+}
+
 async function fetchMarkets() {
   if (state.demo) { loadDemoMarkets(); return; }
   const btn = document.getElementById('fetchBtn');
@@ -1339,161 +1374,104 @@ async function fetchMarkets() {
   btn.textContent = 'CARGANDO...';
 
   const polyBase = WORKERS.polymarket || 'https://gamma-api.polymarket.com';
-  let liveMarkets = [], upcomingMarkets = [];
 
   try {
-    // ── STRATEGY: hit /events endpoint which groups by real sports event ──
-    // active=true = currently trading (includes live games)
-    // Then fetch upcoming (next 3 days) separately
-    log('Buscando eventos live en Polymarket...', 'accent');
+    log('Cargando mercados deportivos...', 'accent');
 
-    const [liveRes, upcomingRes] = await Promise.all([
-      fetch(`${polyBase}/events?active=true&closed=false&limit=100&order=volume&ascending=false`),
-      fetch(`${polyBase}/events?active=true&closed=false&limit=100&order=startDate&ascending=true`)
-    ]);
+    // ── Use the Worker's clean /sportsbrain/live endpoint ──────────────
+    // This endpoint filters server-side: sports only, 4-day window, valid odds
+    const res = await fetch(`${polyBase}/sportsbrain/live`);
 
-    const liveData     = liveRes.ok     ? await liveRes.json()     : [];
-    const upcomingData = upcomingRes.ok ? await upcomingRes.json() : [];
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
 
-    // Flatten events → markets, tagging each with live/upcoming
-    const now = Date.now();
-    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    if (!payload.ok && payload.error) throw new Error(payload.error);
 
-    function eventToMarkets(events, tag) {
-      const out = [];
-      const arr = Array.isArray(events) ? events : (events.data || events.events || []);
-      for (const ev of arr) {
-        const evTitle = ev.title || ev.name || '';
-        // Each event has child markets
-        const children = ev.markets || [];
-        for (const m of children) {
-          if (!m || !m.question) continue;
-          const q = m.question;
-
-          // Skip non-sports garbage
-          if (EXCLUDE_KEYWORDS.test(q) && !MATCH_KEYWORDS.test(evTitle)) continue;
-
-          // Must look like sports
-          const tags = (ev.tags || m.tags || []).map(t =>
-            (typeof t === 'string' ? t : (t.slug||t.label||t.id||'')).toLowerCase()
-          );
-          const isSport = tags.some(t => POLYMARKET_SPORTS_TAGS.some(s => t.includes(s)))
-                       || MATCH_KEYWORDS.test(q)
-                       || MATCH_KEYWORDS.test(evTitle);
-          if (!isSport) continue;
-
-          // Only winner markets (YES/NO binary with balanced odds)
-          const op = m.outcomePrices;
-          let odds = 0.5;
-          try {
-            const arr2 = typeof op === 'string' ? JSON.parse(op) : (Array.isArray(op) ? op : []);
-            if (arr2.length >= 2) {
-              // Pick the YES price (first outcome that's between 8-92%)
-              for (const p of arr2) {
-                const pf = parseFloat(p);
-                if (pf >= 0.08 && pf <= 0.92) { odds = pf; break; }
-              }
-            }
-          } catch(e) {
-            odds = parseFloat(m.lastTradePrice || m.bestAsk || 0.5) || 0.5;
-          }
-          if (odds > 1) odds /= 100;
-          if (isNaN(odds) || odds < 0.08 || odds > 0.92) continue;
-
-          // Volume filter
-          const vol = parseFloat(m.volume || m.volumeNum || ev.volume || 0);
-          if (vol < 200) continue;
-
-          // Date
-          const endRaw = m.endDate || ev.endDate || ev.expirationDate || null;
-          const endTs  = endRaw ? new Date(endRaw).getTime() : null;
-          if (endTs && endTs < now) continue; // already closed
-
-          // Is it live? endDate within 4h OR event has startDate in past
-          const startTs = ev.startDate ? new Date(ev.startDate).getTime() : null;
-          const isLive  = (startTs && startTs <= now)
-                       || (endTs && endTs - now < 4 * 3600 * 1000)
-                       || tag === 'live';
-
-          out.push({
-            id: m.id || m.conditionId || (ev.id + '_' + Math.random()),
-            question: q,
-            eventTitle: evTitle,
-            sport: detectSport(q + ' ' + evTitle),
-            polyOdds: odds,
-            volume: vol,
-            endDate: endRaw,
-            isLive,
-            tag,
-            raw: m,
-            eventRaw: ev
-          });
-        }
-      }
-      return out;
-    }
-
-    const fromLive     = eventToMarkets(liveData,     'live');
-    const fromUpcoming = eventToMarkets(upcomingData, 'upcoming');
-
-    // Dedupe by id, live takes priority
-    const seen = new Set();
-    for (const m of [...fromLive, ...fromUpcoming]) {
-      if (!seen.has(m.id)) { seen.add(m.id); }
-      else continue;
-      if (m.isLive) liveMarkets.push(m);
-      else upcomingMarkets.push(m);
-    }
-
-    // Sort: live first (by volume desc), then upcoming (by endDate asc)
-    liveMarkets.sort((a,b) => b.volume - a.volume);
-    upcomingMarkets.sort((a,b) => new Date(a.endDate||0) - new Date(b.endDate||0));
-
-    state.markets = [...liveMarkets, ...upcomingMarkets].slice(0, 40);
-
-    // ── FALLBACK: if /events returns nothing, try /markets directly ──
-    if (state.markets.length === 0) {
-      log('Events API vacía — fallback a /markets...', 'warn');
-      const fbRes = await fetch(`${polyBase}/markets?closed=false&limit=200&order=volume&ascending=false`);
-      const fbData = fbRes.ok ? await fbRes.json() : [];
-      const arr = Array.isArray(fbData) ? fbData : [];
-      log(`Fallback: ${arr.length} mercados raw | keys: ${arr[0] ? Object.keys(arr[0]).slice(0,8).join(', ') : 'n/a'}`, 'normal');
-
-      state.markets = arr.filter(m => {
-        if (!m?.question) return false;
-        if (EXCLUDE_KEYWORDS.test(m.question)) return false;
-        const tags = (m.tags||[]).map(t=>(typeof t==='string'?t:(t.slug||t.label||'')).toLowerCase());
-        if (!tags.some(t=>POLYMARKET_SPORTS_TAGS.some(s=>t.includes(s))) && !MATCH_KEYWORDS.test(m.question)) return false;
-        const op = m.outcomePrices;
-        try {
-          const a = typeof op==='string'?JSON.parse(op):(Array.isArray(op)?op:[]);
-          const p = parseFloat(a[0]);
-          if (p < 0.08 || p > 0.92) return false;
-        } catch(e) { return false; }
-        return parseFloat(m.volume||0) >= 200;
-      }).slice(0,30).map(m => {
-        let odds = 0.5;
-        try { const a=typeof m.outcomePrices==='string'?JSON.parse(m.outcomePrices):m.outcomePrices; odds=parseFloat(a[0]); } catch(e){}
-        if (odds>1) odds/=100;
-        return {
-          id: m.id||String(Math.random()), question: m.question,
-          sport: detectSport(m.question), polyOdds: odds,
-          volume: parseFloat(m.volume||0), endDate: m.endDate,
-          isLive: false, tag: 'fallback', raw: m
-        };
-      });
-    }
+    state.markets = (payload.markets || []).map(m => ({
+      id:        m.id,
+      question:  m.question,
+      eventTitle: m.eventTitle || '',
+      sport:     m.sport || detectSport(m.question),
+      polyOdds:  m.polyOdds,
+      volume:    m.volume,
+      endDate:   m.endDate,
+      isLive:    m.isLive,
+      conditionId:  m.conditionId,
+      clobTokenIds: m.clobTokenIds,
+      raw: m,
+    }));
 
     renderMarkets();
     document.getElementById('activeMarkets').textContent = state.markets.length;
-    log(`✓ ${liveMarkets.length} LIVE + ${upcomingMarkets.length} próximos = ${state.markets.length} total`, 'accent');
+    log(`✓ ${payload.live} LIVE + ${payload.upcoming} próximos = ${payload.total} partidos`, 'accent');
 
   } catch(e) {
-    log('Error Polymarket: ' + e.message, 'err');
-    loadDemoMarkets();
+    log(`Error: ${e.message}`, 'err');
+    // If worker not updated yet, fallback to direct filtering
+    await fetchMarketsLegacy();
   }
   btn.disabled = false;
   btn.textContent = '↻ ACTUALIZAR';
+}
+
+// ── Legacy fallback (used if Worker hasn't been redeployed yet) ────────────
+async function fetchMarketsLegacy() {
+  const polyBase = WORKERS.polymarket || 'https://gamma-api.polymarket.com';
+  log('Fallback: consultando /markets directamente...', 'warn');
+  try {
+    const now = Date.now();
+    const fourDays = 4 * 24 * 3600 * 1000;
+    const res = await fetch(`${polyBase}/markets?active=true&closed=false&limit=300&order=endDate&ascending=true`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const all = Array.isArray(data) ? data : [];
+    log(`Raw: ${all.length} mercados — filtrando...`, 'normal');
+
+    state.markets = all.filter(m => {
+      if (!m?.question) return false;
+      const q = m.question;
+      // Junk filter
+      if (/president|election|nominat|republican|democrat|rfk|kennedy|trump|biden|crypto|bitcoin|stock price|above \$|below \$/i.test(q)) return false;
+      // Date: closes within 4 days
+      const endTs = new Date(m.endDate || 0).getTime();
+      if (!endTs || endTs < now || endTs > now + fourDays) return false;
+      // Sports tag or match keyword
+      const tags = (m.tags||[]).map(t=>(typeof t==='string'?t:(t.slug||t.label||'')).toLowerCase());
+      const hasSport = tags.some(t=>/sport|soccer|nba|nfl|nhl|mlb|tennis|basketball|football|hockey|baseball|ufc|mma|boxing|golf|racing|f1/i.test(t));
+      const isMatch  = /\b(win|beat|vs\.?|match|game|series|final|playoff|fight)\b/i.test(q);
+      if (!hasSport && !isMatch) return false;
+      // Odds range
+      let odds = null;
+      try {
+        const op = m.outcomePrices;
+        const arr = typeof op==='string'?JSON.parse(op):(Array.isArray(op)?op:[]);
+        for (const p of arr) { const pf=parseFloat(p); if(pf>=0.08&&pf<=0.92){odds=pf;break;} }
+      } catch(e) {}
+      if (odds===null) return false;
+      // Volume
+      return parseFloat(m.volume||0) >= 100;
+    }).slice(0, 40).map(m => {
+      let odds = 0.5;
+      try { const a=typeof m.outcomePrices==='string'?JSON.parse(m.outcomePrices):m.outcomePrices; for(const p of a){const pf=parseFloat(p);if(pf>=0.08&&pf<=0.92){odds=pf;break;}} } catch(e){}
+      const endTs = new Date(m.endDate||0).getTime();
+      const hoursLeft = (endTs - Date.now()) / 3600000;
+      return {
+        id: m.id, question: m.question, eventTitle: '',
+        sport: detectSport(m.question), polyOdds: odds,
+        volume: parseFloat(m.volume||0), endDate: m.endDate,
+        isLive: hoursLeft <= 5, conditionId: m.conditionId,
+        clobTokenIds: m.clobTokenIds, raw: m,
+      };
+    });
+
+    renderMarkets();
+    document.getElementById('activeMarkets').textContent = state.markets.length;
+    const live = state.markets.filter(m=>m.isLive).length;
+    log(`Fallback: ${live} LIVE + ${state.markets.length-live} próximos`, 'warn');
+  } catch(e) {
+    log('Fallback error: ' + e.message + ' — cargando demo', 'err');
+    loadDemoMarkets();
+  }
 }
 
 function detectSport(q) {
