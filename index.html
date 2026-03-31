@@ -1178,7 +1178,7 @@ function clearLog() {
 }
 
 // ─── MARKETS ──────────────────────────────────────────
-const POLYMARKET_SPORTS_TAGS = ['sports', 'soccer', 'nba', 'nfl', 'tennis', 'mlb', 'basketball'];
+const POLYMARKET_SPORTS_TAGS = ['sports', 'soccer', 'nba', 'nfl', 'nhl', 'tennis', 'mlb', 'baseball', 'basketball', 'football', 'golf', 'mma', 'ufc', 'boxing', 'formula', 'racing', 'cricket', 'rugby', 'volleyball', 'olympics'];
 
 async function fetchMarkets() {
   if (state.demo) { loadDemoMarkets(); return; }
@@ -1191,28 +1191,69 @@ async function fetchMarkets() {
     // Polymarket CLOB API — markets endpoint (public, no auth needed para leer)
     const polyBase = WORKERS.polymarket || 'https://gamma-api.polymarket.com';
     const res = await fetch(
-      `${polyBase}/markets?closed=false&tag_slug=sports&limit=40&order=volume&ascending=false`
+      `${polyBase}/markets?closed=false&limit=100&order=volume&ascending=false`
     );
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
-    state.markets = data.filter(m => {
-      const tags = (m.tags || []).map(t => (t.slug || t.label || '').toLowerCase());
-      return tags.some(t => POLYMARKET_SPORTS_TAGS.includes(t)) || 
-             /soccer|nba|nfl|tennis|mlb|football|basketball|sport/i.test(m.question || '');
-    }).slice(0, 20).map(m => ({
-      id: m.id,
-      question: m.question,
-      sport: detectSport(m.question),
-      polyOdds: parseFloat(m.outcomePrices?.[0] || m.lastTradePrice || 0.5),
-      volume: parseFloat(m.volume || 0),
-      endDate: m.endDate,
-      raw: m
-    }));
+    // Debug: log raw structure of first market
+    if (data && data.length > 0) {
+      const sample = data[0];
+      const priceKeys = ['outcomePrices','lastTradePrice','price','bestBid','bestAsk','tokens'];
+      const found = priceKeys.filter(k => sample[k] !== undefined);
+      log(`Polymarket estructura: ${found.join(', ')} | total raw: ${data.length}`, 'normal');
+      // Log the raw price fields for diagnosis
+      const priceDebug = found.map(k => `${k}=${JSON.stringify(sample[k])?.slice(0,40)}`).join(' | ');
+      if (priceDebug) log(`Precios muestra: ${priceDebug}`, 'normal');
+    }
+
+    const allMarkets = Array.isArray(data) ? data : (data.markets || data.data || []);
+
+    state.markets = allMarkets.filter(m => {
+      if (!m || !m.question) return false;
+      const q = (m.question || '').toLowerCase();
+      const tags = (m.tags || []).map(t => (typeof t === 'string' ? t : (t.slug || t.label || t.id || '')).toLowerCase());
+      const tagMatch = tags.some(t => POLYMARKET_SPORTS_TAGS.some(st => t.includes(st)));
+      const qMatch = /soccer|nba|nfl|nhl|tennis|mlb|football|basketball|sport|match|draft|champion|league|cup|series|game|playoff|super bowl|world cup|grand slam/i.test(q);
+      return tagMatch || qMatch;
+    }).slice(0, 25).map(m => {
+      // Robust price extraction — Polymarket has changed their API format multiple times
+      let odds = 0.5;
+      if (m.outcomePrices) {
+        // outcomePrices can be "["0.54","0.46"]" (JSON string) or array
+        try {
+          const parsed = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          odds = parseFloat(parsed[0]);
+        } catch(e) { odds = parseFloat(m.outcomePrices) || 0.5; }
+      } else if (m.tokens && m.tokens[0]?.price !== undefined) {
+        odds = parseFloat(m.tokens[0].price);
+      } else if (m.lastTradePrice !== undefined) {
+        odds = parseFloat(m.lastTradePrice);
+      } else if (m.bestBid !== undefined) {
+        odds = parseFloat(m.bestBid);
+      } else if (m.price !== undefined) {
+        odds = parseFloat(m.price);
+      }
+      // Normalize: if odds > 1 assume it's 0-100 scale
+      if (odds > 1) odds = odds / 100;
+      if (isNaN(odds) || odds <= 0 || odds >= 1) odds = 0.5;
+
+      const vol = parseFloat(m.volume || m.volumeNum || m.volume24hr || 0);
+
+      return {
+        id: m.id || m.conditionId || String(Math.random()),
+        question: m.question,
+        sport: detectSport(m.question),
+        polyOdds: odds,
+        volume: vol,
+        endDate: m.endDate,
+        raw: m
+      };
+    });
 
     renderMarkets();
     document.getElementById('activeMarkets').textContent = state.markets.length;
-    log(`${state.markets.length} mercados deportivos cargados`, 'accent');
+    log(`${state.markets.length} mercados deportivos cargados (de ${allMarkets.length} totales)`, 'accent');
   } catch (e) {
     log('Error Polymarket API: ' + e.message + ' — cargando demo', 'err');
     loadDemoMarkets();
@@ -1297,9 +1338,9 @@ function renderMarkets() {
 }
 
 function estimateRealProb(m) {
-  // Naive baseline: slight regression to mean + sport-specific bias
+  const odds = (isNaN(m.polyOdds) || m.polyOdds <= 0) ? 0.5 : m.polyOdds;
   const sportBias = { fut: 0.02, nba: -0.01, nfl: -0.02, ten: 0.01, mlb: 0.0 };
-  const base = m.polyOdds * 0.95 + 0.025 + (sportBias[m.sport] || 0);
+  const base = odds * 0.95 + 0.025 + (sportBias[m.sport] || 0);
   return Math.max(0.02, Math.min(0.97, base));
 }
 
