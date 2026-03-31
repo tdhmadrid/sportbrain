@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SportsBrain — Bot Fase 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d12;
+    --bg2: #0f1318;
+    --bg3: #161b23;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0;
+    --text2: #8b909e;
+    --text3: #555a66;
+    --accent: #00e5a0;
+    --accent2: #00b87d;
+    --warn: #f5a623;
+    --danger: #ff4d6a;
+    --info: #3b9eff;
+    --purple: #a78bfa;
+    --mono: 'DM Mono', monospace;
+    --head: 'Syne', sans-serif;
+    --body: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID NOISE BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,13,18,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+
+  .logo {
+    font-family: var(--head);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .phase-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: rgba(0,229,160,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,160,0.25);
+    padding: 3px 10px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* NAV TABS */
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 24px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .nav-tab {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text3);
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+
+  .nav-tab:hover { color: var(--text2); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* MAIN LAYOUT */
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-family: var(--head);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* GRID LAYOUTS */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .grid-main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+
+  @media (max-width: 1100px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-main { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  /* METRIC CARDS */
+  .metric {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .metric-value {
+    font-family: var(--head);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .metric-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+
+  .up { color: var(--accent); }
+  .down { color: var(--danger); }
+  .neutral { color: var(--text2); }
+  .warn-c { color: var(--warn); }
+
+  /* MARKET TABLE */
+  .market-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .market-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .market-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .market-table tr:last-child td { border-bottom: none; }
+
+  .market-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .sport-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  .sport-fut { background: rgba(0,229,160,0.1); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
+  .sport-nba { background: rgba(245,166,35,0.1); color: var(--warn); border: 1px solid rgba(245,166,35,0.2); }
+  .sport-nfl { background: rgba(59,158,255,0.1); color: var(--info); border: 1px solid rgba(59,158,255,0.2); }
+  .sport-ten { background: rgba(167,139,250,0.1); color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+  .sport-mlb { background: rgba(255,77,106,0.1); color: var(--danger); border: 1px solid rgba(255,77,106,0.2); }
+
+  /* CONFIDENCE BAR */
+  .conf-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .conf-bar {
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .conf-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ANALYZE BUTTON */
+  .btn-analyze {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    background: rgba(0,229,160,0.08);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,160,0.2);
+    padding: 5px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-analyze:hover {
+    background: rgba(0,229,160,0.15);
+    border-color: rgba(0,229,160,0.4);
+  }
+
+  .btn-analyze:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ANALYSIS PANEL */
+  .analysis-panel {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .analysis-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .analysis-body {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    min-height: 400px;
+  }
+
+  .analysis-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text3);
+    text-align: center;
+    min-height: 300px;
+  }
+
+  .analysis-empty-icon {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  .analysis-content {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .analysis-content.visible { display: flex; }
+
+  .ai-thinking {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 0;
+  }
+
+  .ai-thinking.visible { display: flex; }
+
+  .thinking-line {
+    height: 10px;
+    background: var(--border);
+    border-radius: 5px;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%,100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+  }
+
+  .thinking-line:nth-child(2) { width: 85%; animation-delay: 0.2s; }
+  .thinking-line:nth-child(3) { width: 70%; animation-delay: 0.4s; }
+  .thinking-line:nth-child(4) { width: 90%; animation-delay: 0.1s; }
+  .thinking-line:nth-child(5) { width: 60%; animation-delay: 0.3s; }
+
+  /* ANALYSIS RESULT COMPONENTS */
+  .analysis-score-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .big-score {
+    font-family: var(--head);
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .analysis-section {
+    padding: 14px 16px;
+    background: var(--bg2);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+  }
+
+  .analysis-section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .analysis-text {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  .kelly-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .kelly-cell {
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .kelly-cell-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .kelly-cell-value {
+    font-family: var(--head);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  /* VERDICT */
+  .verdict-badge {
+    display: inline-block;
+    font-family: var(--head);
+    font-size: 14px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .verdict-bet { background: rgba(0,229,160,0.15); color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
+  .verdict-pass { background: rgba(255,77,106,0.12); color: var(--danger); border: 1px solid rgba(255,77,106,0.25); }
+  .verdict-watch { background: rgba(245,166,35,0.12); color: var(--warn); border: 1px solid rgba(245,166,35,0.25); }
+
+  /* LEARNING TAB */
+  .learning-entry {
+    padding: 14px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .learning-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  /* CONFIG SECTION */
+  .config-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .config-row:last-child { border-bottom: none; }
+
+  .config-label { font-size: 13px; color: var(--text2); }
+  .config-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+    background: var(--border2);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+  }
+
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: var(--text3);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .toggle.on { background: rgba(0,229,160,0.3); }
+  .toggle.on::after { transform: translateX(16px); background: var(--accent); }
+
+  .range-input {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* SPORT LIMIT BARS */
+  .sport-limit-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sport-limit-row:last-child { border-bottom: none; }
+
+  .sport-limit-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  /* BANKROLL PROGRESS */
+  .bankroll-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg3);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .bankroll-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 4px;
+    transition: width 0.8s ease;
+  }
+
+  /* LOG */
+  .log-entry {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    display: flex;
+    gap: 12px;
+  }
+
+  .log-time { color: var(--text3); flex-shrink: 0; }
+  .log-accent { color: var(--accent); }
+  .log-warn { color: var(--warn); }
+  .log-err { color: var(--danger); }
+
+  /* API KEY MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 28px;
+    max-width: 480px;
+    width: 90%;
+  }
+
+  .modal h2 {
+    font-family: var(--head);
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .modal p { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 20px; }
+
+  .input-field {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+
+  .input-field:focus { border-color: rgba(0,229,160,0.4); }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--accent);
+    color: #000;
+    font-family: var(--head);
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary:hover { background: var(--accent2); }
+
+  .btn-secondary {
+    width: 100%;
+    background: transparent;
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 9px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover { border-color: var(--border2); color: var(--text); }
+
+  .section-gap { margin-bottom: 16px; }
+  .small-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- MODAL API KEY -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <h2>⚡ SportsBrain</h2>
+    <p>Fase 1 — Análisis y monitoreo sin ejecución.<br>
+    Para que el cerebro LLM analice los mercados, necesitas tu API key de Anthropic.<br>
+    La key se guarda solo en tu navegador (localStorage).</p>
+    <input class="input-field" type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--text2);">Capital inicial (USD)</label>
+      <input class="input-field" type="number" id="capitalInput" placeholder="100" min="1" max="10000" style="margin-top:6px;margin-bottom:0">
+    </div>
+    <button class="btn-primary" onclick="saveConfig()">Iniciar SportsBrain</button>
+    <button class="btn-secondary" onclick="demoMode()">Entrar en modo demo (sin API key)</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      SportsBrain
+    </div>
+    <span class="phase-badge">FASE 1</span>
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span id="statusText">ANALIZANDO</span>
+    </div>
+    <div class="status-pill" style="color:var(--accent);font-weight:500">
+      $<span id="headerBankroll">0.00</span>
+    </div>
+  </div>
+</header>
+
+<!-- NAV TABS -->
+<nav class="nav-tabs">
+  <button class="nav-tab active" onclick="showTab('markets', this)">MERCADOS</button>
+  <button class="nav-tab" onclick="showTab('performance', this)">PERFORMANCE</button>
+  <button class="nav-tab" onclick="showTab('learning', this)">APRENDIZAJE</button>
+  <button class="nav-tab" onclick="showTab('config', this)">CONFIG</button>
+  <button class="nav-tab" onclick="showTab('log', this)">LOG</button>
+</nav>
+
+<main>
+
+  <!-- ===== TAB: MERCADOS ===== -->
+  <div class="tab-panel active" id="tab-markets">
+    <!-- KPIs -->
+    <div class="grid-4 section-gap">
+      <div class="metric">
+        <div class="metric-label">BANKROLL</div>
+        <div class="metric-value" id="bankrollVal">$0.00</div>
+        <div class="metric-sub neutral" id="bankrollSub">Capital inicial</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">MERCADOS ACTIVOS</div>
+        <div class="metric-value" id="activeMarkets">0</div>
+        <div class="metric-sub neutral">Polymarket deportivo</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">OPORTUNIDADES HOY</div>
+        <div class="metric-value up" id="oppsToday">0</div>
+        <div class="metric-sub neutral">Score ≥ 65</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">VALOR ESPERADO</div>
+        <div class="metric-value" id="evTotal">—</div>
+        <div class="metric-sub neutral">EV promedio detectado</div>
+      </div>
+    </div>
+
+    <!-- MAIN: TABLE + ANALYSIS PANEL -->
+    <div class="grid-main">
+      <!-- LEFT: MARKET TABLE -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span class="card-title">MERCADOS DEPORTIVOS</span>
+          <button class="btn-analyze" id="fetchBtn" onclick="fetchMarkets()">↻ ACTUALIZAR</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="market-table" id="marketTable">
+            <thead>
+              <tr>
+                <th>EVENTO</th>
+                <th>DEPORTE</th>
+                <th>ODDS POLY</th>
+                <th>PROB REAL</th>
+                <th>EV</th>
+                <th>CONFIANZA</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="marketBody">
+              <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3);font-family:var(--mono);font-size:12px">
+                Haz click en "ACTUALIZAR" para cargar mercados desde Polymarket
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: ANALYSIS PANEL -->
+      <div class="analysis-panel">
+        <div class="analysis-header">
+          <span class="card-title">ANÁLISIS LLM</span>
+          <span id="analysisMeta" style="font-family:var(--mono);font-size:10px;color:var(--text3)">—</span>
+        </div>
+        <div class="analysis-body" id="analysisBody">
+          <div class="analysis-empty" id="analysisEmpty">
+            <div class="analysis-empty-icon">◎</div>
+            <div style="font-size:13px;color:var(--text3)">Selecciona un mercado<br>para analizar con IA</div>
+          </div>
+          <div class="ai-thinking" id="aiThinking">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:1px;margin-bottom:4px">PROCESANDO...</div>
+            <div class="thinking-line" style="width:100%"></div>
+            <div class="thinking-line"></div>
+            <div class="thinking-line"></div>
+            <div class="thinking-line"></div>
+            <div class="thinking-line"></div>
+          </div>
+          <div class="analysis-content" id="analysisContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: PERFORMANCE ===== -->
+  <div class="tab-panel" id="tab-performance">
+    <div class="grid-4 section-gap">
+      <div class="metric">
+        <div class="metric-label">P&L TOTAL</div>
+        <div class="metric-value" id="pnl">$0.00</div>
+        <div class="metric-sub neutral">Desde inicio</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">ROI</div>
+        <div class="metric-value" id="roi">0%</div>
+        <div class="metric-sub neutral">Return on investment</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">WIN RATE</div>
+        <div class="metric-value" id="winrate">—</div>
+        <div class="metric-sub neutral">Sin apuestas aún</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">ANÁLISIS TOTAL</div>
+        <div class="metric-value" id="totalAnalysis">0</div>
+        <div class="metric-sub neutral">Por LLM esta sesión</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">CURVA DE CAPITAL</span></div>
+        <div style="height:180px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-family:var(--mono);font-size:12px">
+          Disponible cuando haya historial de apuestas
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">PERFORMANCE POR DEPORTE</span></div>
+        <div id="sportPerf">
+          <div class="sport-limit-row">
+            <span class="sport-limit-name"><span class="sport-badge sport-fut">FUT</span></span>
+            <div class="conf-bar" style="flex:1"><div class="conf-fill" style="width:0%;background:var(--accent)"></div></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);width:40px;text-align:right">0%</span>
+          </div>
+          <div class="sport-limit-row">
+            <span class="sport-limit-name"><span class="sport-badge sport-nba">NBA</span></span>
+            <div class="conf-bar" style="flex:1"><div class="conf-fill" style="width:0%;background:var(--warn)"></div></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);width:40px;text-align:right">0%</span>
+          </div>
+          <div class="sport-limit-row">
+            <span class="sport-limit-name"><span class="sport-badge sport-nfl">NFL</span></span>
+            <div class="conf-bar" style="flex:1"><div class="conf-fill" style="width:0%;background:var(--info)"></div></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);width:40px;text-align:right">0%</span>
+          </div>
+          <div class="sport-limit-row">
+            <span class="sport-limit-name"><span class="sport-badge sport-ten">TEN</span></span>
+            <div class="conf-bar" style="flex:1"><div class="conf-fill" style="width:0%;background:var(--purple)"></div></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);width:40px;text-align:right">0%</span>
+          </div>
+          <div class="sport-limit-row">
+            <span class="sport-limit-name"><span class="sport-badge sport-mlb">MLB</span></span>
+            <div class="conf-bar" style="flex:1"><div class="conf-fill" style="width:0%;background:var(--danger)"></div></div>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text3);width:40px;text-align:right">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: APRENDIZAJE ===== -->
+  <div class="tab-panel" id="tab-learning">
+    <div class="grid-2 section-gap">
+      <div class="card">
+        <div class="card-header"><span class="card-title">PATRONES DETECTADOS</span></div>
+        <div id="patternsBody" style="color:var(--text3);font-family:var(--mono);font-size:12px;text-align:center;padding:30px">
+          El bot aprende de cada análisis completado.<br>Los patrones aparecen aquí con el tiempo.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">MEMORIA DEL BOT</span></div>
+        <div id="memoryBody">
+          <div class="metric" style="margin-bottom:8px">
+            <div class="metric-label">ANÁLISIS COMPLETADOS</div>
+            <div class="metric-value" id="memAnalysis">0</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">DEPORTES ANALIZADOS</div>
+            <div class="metric-value" id="memSports">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">HISTORIAL DE ANÁLISIS</span></div>
+      <div id="historyBody" style="color:var(--text3);font-family:var(--mono);font-size:12px;text-align:center;padding:30px">
+        Sin análisis todavía. Analiza mercados desde la pestaña MERCADOS.
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: CONFIG ===== -->
+  <div class="tab-panel" id="tab-config">
+    <div class="grid-2">
+      <div class="card">
+        <div class="small-title">DEPORTES ACTIVOS</div>
+        <div class="config-row">
+          <div><div class="config-label"><span class="sport-badge sport-fut">FUT</span> Fútbol</div>
+          <div class="config-sub">Champions, Premier, LaLiga, Ligue 1...</div></div>
+          <button class="toggle on" id="tog-fut" onclick="toggleSport('fut',this)"></button>
+        </div>
+        <div class="config-row">
+          <div><div class="config-label"><span class="sport-badge sport-nba">NBA</span> Basketball</div>
+          <div class="config-sub">NBA regular season y playoffs</div></div>
+          <button class="toggle on" id="tog-nba" onclick="toggleSport('nba',this)"></button>
+        </div>
+        <div class="config-row">
+          <div><div class="config-label"><span class="sport-badge sport-nfl">NFL</span> Americano</div>
+          <div class="config-sub">NFL regular season, playoffs y Super Bowl</div></div>
+          <button class="toggle on" id="tog-nfl" onclick="toggleSport('nfl',this)"></button>
+        </div>
+        <div class="config-row">
+          <div><div class="config-label"><span class="sport-badge sport-ten">TEN</span> Tenis</div>
+          <div class="config-sub">Grand Slams y Masters 1000</div></div>
+          <button class="toggle" id="tog-ten" onclick="toggleSport('ten',this)"></button>
+        </div>
+        <div class="config-row">
+          <div><div class="config-label"><span class="sport-badge sport-mlb">MLB</span> Baseball</div>
+          <div class="config-sub">MLB temporada regular y playoffs</div></div>
+          <button class="toggle" id="tog-mlb" onclick="toggleSport('mlb',this)"></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="small-title">GESTIÓN DE RIESGO</div>
+
+        <div class="config-row">
+          <div><div class="config-label">Kelly Factor</div>
+          <div class="config-sub" id="kellySubLabel">25% del Kelly full</div></div>
+          <input type="range" min="10" max="50" value="25" step="5" class="range-input" style="width:120px"
+            oninput="updateKelly(this.value)" id="kellyRange">
+        </div>
+
+        <div class="config-row">
+          <div><div class="config-label">Apuesta mínima</div>
+          <div class="config-sub">No apostar menos de este monto</div></div>
+          <span style="font-family:var(--mono);font-size:13px;color:var(--accent)">$1.00</span>
+        </div>
+
+        <div class="config-row">
+          <div><div class="config-label">Stop-loss diario</div>
+          <div class="config-sub" id="stopLossLabel">20% del bankroll por día</div></div>
+          <input type="range" min="10" max="40" value="20" step="5" class="range-input" style="width:120px"
+            oninput="updateStopLoss(this.value)" id="stopLossRange">
+        </div>
+
+        <div class="small-title" style="margin-top:20px">LÍMITE POR DEPORTE</div>
+        <div class="sport-limit-row">
+          <span class="sport-limit-name" style="font-size:11px">Fútbol</span>
+          <input type="range" min="5" max="50" value="30" step="5" class="range-input"
+            oninput="updateSportLimit('fut',this.value)" id="lim-fut">
+          <span id="lim-fut-val" style="font-family:var(--mono);font-size:11px;color:var(--accent);width:36px;text-align:right">30%</span>
+        </div>
+        <div class="sport-limit-row">
+          <span class="sport-limit-name" style="font-size:11px">NBA</span>
+          <input type="range" min="5" max="50" value="25" step="5" class="range-input"
+            oninput="updateSportLimit('nba',this.value)" id="lim-nba">
+          <span id="lim-nba-val" style="font-family:var(--mono);font-size:11px;color:var(--warn);width:36px;text-align:right">25%</span>
+        </div>
+        <div class="sport-limit-row">
+          <span class="sport-limit-name" style="font-size:11px">NFL</span>
+          <input type="range" min="5" max="50" value="20" step="5" class="range-input"
+            oninput="updateSportLimit('nfl',this.value)" id="lim-nfl">
+          <span id="lim-nfl-val" style="font-family:var(--mono);font-size:11px;color:var(--info);width:36px;text-align:right">20%</span>
+        </div>
+        <div class="sport-limit-row">
+          <span class="sport-limit-name" style="font-size:11px">Tenis</span>
+          <input type="range" min="5" max="50" value="15" step="5" class="range-input"
+            oninput="updateSportLimit('ten',this.value)" id="lim-ten">
+          <span id="lim-ten-val" style="font-family:var(--mono);font-size:11px;color:var(--purple);width:36px;text-align:right">15%</span>
+        </div>
+        <div class="sport-limit-row">
+          <span class="sport-limit-name" style="font-size:11px">MLB</span>
+          <input type="range" min="5" max="50" value="10" step="5" class="range-input"
+            oninput="updateSportLimit('mlb',this.value)" id="lim-mlb">
+          <span id="lim-mlb-val" style="font-family:var(--mono);font-size:11px;color:var(--danger);width:36px;text-align:right">10%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="small-title">API KEYS</div>
+      <div class="config-row">
+        <div><div class="config-label">Anthropic API Key</div>
+        <div class="config-sub">Motor LLM de análisis</div></div>
+        <button class="btn-analyze" onclick="resetApiKey()">CAMBIAR KEY</button>
+      </div>
+      <div class="config-row">
+        <div><div class="config-label">Polymarket API</div>
+        <div class="config-sub">Acceso a mercados deportivos (Fase 2)</div></div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">FASE 2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: LOG ===== -->
+  <div class="tab-panel" id="tab-log">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">LOG DEL SISTEMA</span>
+        <button class="btn-analyze" onclick="clearLog()">LIMPIAR</button>
+      </div>
+      <div id="logBody" style="max-height:600px;overflow-y:auto">
+        <div class="log-entry"><span class="log-time">INIT</span><span class="log-accent">SportsBrain v0.1 — Fase 1 arrancado</span></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── STATE ───────────────────────────────────────────
+const state = {
+  apiKey: '',
+  demo: false,
+  capital: 100,
+  bankroll: 100,
+  totalAnalysis: 0,
+  markets: [],
+  history: [],
+  patterns: {},
+  sports: { fut: true, nba: true, nfl: true, ten: false, mlb: false },
+  kellyFactor: 0.25,
+  stopLoss: 0.20,
+  sportLimits: { fut: 30, nba: 25, nfl: 20, ten: 15, mlb: 10 }
+};
+
+// ─── INIT ─────────────────────────────────────────────
+window.onload = () => {
+  const saved = localStorage.getItem('sportsbrain_config');
+  if (saved) {
+    const cfg = JSON.parse(saved);
+    state.apiKey = cfg.apiKey || '';
+    state.capital = cfg.capital || 100;
+    state.bankroll = cfg.bankroll || state.capital;
+    state.demo = cfg.demo || false;
+    state.history = cfg.history || [];
+    state.patterns = cfg.patterns || {};
+    state.totalAnalysis = cfg.totalAnalysis || 0;
+    document.getElementById('apiModal').style.display = 'none';
+    updateUI();
+    log('Config cargada desde localStorage', 'accent');
+    renderHistory();
+    renderPatterns();
+  }
+};
+
+function saveConfig() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const cap = parseFloat(document.getElementById('capitalInput').value) || 100;
+  if (!key) { alert('Ingresa tu API key de Anthropic'); return; }
+  state.apiKey = key;
+  state.capital = cap;
+  state.bankroll = cap;
+  state.demo = false;
+  persist();
+  document.getElementById('apiModal').style.display = 'none';
+  updateUI();
+  log('API key configurada — modo real activo', 'accent');
+}
+
+function demoMode() {
+  state.demo = true;
+  state.capital = 100;
+  state.bankroll = 100;
+  document.getElementById('apiModal').style.display = 'none';
+  updateUI();
+  log('Modo demo activo — análisis simulado', 'warn');
+  // Load demo markets
+  loadDemoMarkets();
+}
+
+function resetApiKey() {
+  document.getElementById('apiModal').style.display = 'flex';
+}
+
+function persist() {
+  localStorage.setItem('sportsbrain_config', JSON.stringify({
+    apiKey: state.apiKey,
+    capital: state.capital,
+    bankroll: state.bankroll,
+    demo: state.demo,
+    history: state.history,
+    patterns: state.patterns,
+    totalAnalysis: state.totalAnalysis
+  }));
+}
+
+// ─── UI HELPERS ────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function updateUI() {
+  const br = state.bankroll.toFixed(2);
+  document.getElementById('bankrollVal').textContent = '$' + br;
+  document.getElementById('headerBankroll').textContent = br;
+  const pnl = state.bankroll - state.capital;
+  document.getElementById('pnl').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+  document.getElementById('pnl').className = 'metric-value ' + (pnl >= 0 ? 'up' : 'down');
+  const roiVal = ((pnl / state.capital) * 100).toFixed(1);
+  document.getElementById('roi').textContent = (roiVal >= 0 ? '+' : '') + roiVal + '%';
+  document.getElementById('roi').className = 'metric-value ' + (roiVal >= 0 ? 'up' : 'down');
+  document.getElementById('totalAnalysis').textContent = state.totalAnalysis;
+  document.getElementById('memAnalysis').textContent = state.totalAnalysis;
+  document.getElementById('bankrollSub').textContent = 'Capital inicial: $' + state.capital.toFixed(2);
+  if (state.demo) document.getElementById('statusText').textContent = 'DEMO';
+}
+
+function log(msg, type = 'normal') {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0, 8);
+  const div = document.getElementById('logBody');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-${type}">${msg}</span>`;
+  div.insertBefore(entry, div.firstChild);
+}
+
+function clearLog() {
+  document.getElementById('logBody').innerHTML = '';
+}
+
+// ─── MARKETS ──────────────────────────────────────────
+const POLYMARKET_SPORTS_TAGS = ['sports', 'soccer', 'nba', 'nfl', 'tennis', 'mlb', 'basketball'];
+
+async function fetchMarkets() {
+  if (state.demo) { loadDemoMarkets(); return; }
+  const btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  btn.textContent = 'CARGANDO...';
+  log('Consultando Polymarket API — mercados deportivos', 'accent');
+
+  try {
+    // Polymarket CLOB API — markets endpoint (public, no auth needed para leer)
+    const res = await fetch(
+      'https://gamma-api.polymarket.com/markets?closed=false&tag_slug=sports&limit=40&order=volume&ascending=false'
+    );
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    state.markets = data.filter(m => {
+      const tags = (m.tags || []).map(t => (t.slug || t.label || '').toLowerCase());
+      return tags.some(t => POLYMARKET_SPORTS_TAGS.includes(t)) || 
+             /soccer|nba|nfl|tennis|mlb|football|basketball|sport/i.test(m.question || '');
+    }).slice(0, 20).map(m => ({
+      id: m.id,
+      question: m.question,
+      sport: detectSport(m.question),
+      polyOdds: parseFloat(m.outcomePrices?.[0] || m.lastTradePrice || 0.5),
+      volume: parseFloat(m.volume || 0),
+      endDate: m.endDate,
+      raw: m
+    }));
+
+    renderMarkets();
+    document.getElementById('activeMarkets').textContent = state.markets.length;
+    log(`${state.markets.length} mercados deportivos cargados`, 'accent');
+  } catch (e) {
+    log('Error Polymarket API: ' + e.message + ' — cargando demo', 'err');
+    loadDemoMarkets();
+  }
+  btn.disabled = false;
+  btn.textContent = '↻ ACTUALIZAR';
+}
+
+function detectSport(q) {
+  q = (q || '').toLowerCase();
+  if (/soccer|football|laliga|premier|champions|uefa|fifa|goal|match/i.test(q)) return 'fut';
+  if (/nba|basketball|lakers|celtics|warriors|knicks/i.test(q)) return 'nba';
+  if (/nfl|patriots|cowboys|chiefs|eagles|super bowl/i.test(q)) return 'nfl';
+  if (/tennis|djokovic|nadal|federer|alcaraz|slam|wimbledon/i.test(q)) return 'ten';
+  if (/mlb|baseball|yankees|dodgers|world series/i.test(q)) return 'mlb';
+  return 'fut';
+}
+
+function loadDemoMarkets() {
+  state.markets = [
+    { id: 'd1', question: 'Real Madrid beats Manchester City in Champions League', sport: 'fut', polyOdds: 0.54, volume: 284000 },
+    { id: 'd2', question: 'Lakers win NBA Championship 2025', sport: 'nba', polyOdds: 0.18, volume: 510000 },
+    { id: 'd3', question: 'Chiefs win Super Bowl LX', sport: 'nfl', polyOdds: 0.22, volume: 920000 },
+    { id: 'd4', question: 'Alcaraz wins Roland Garros 2025', sport: 'ten', polyOdds: 0.31, volume: 156000 },
+    { id: 'd5', question: 'Dodgers win 2025 World Series', sport: 'mlb', polyOdds: 0.28, volume: 342000 },
+    { id: 'd6', question: 'Barcelona wins LaLiga 2024-25', sport: 'fut', polyOdds: 0.42, volume: 198000 },
+    { id: 'd7', question: 'Celtics repeat NBA Champions 2025', sport: 'nba', polyOdds: 0.25, volume: 445000 },
+    { id: 'd8', question: 'Djokovic wins Wimbledon 2025', sport: 'ten', polyOdds: 0.29, volume: 123000 },
+  ];
+  renderMarkets();
+  document.getElementById('activeMarkets').textContent = state.markets.length;
+  log('Mercados demo cargados', 'warn');
+}
+
+function sportLabel(s) {
+  const map = { fut:'FUT', nba:'NBA', nfl:'NFL', ten:'TEN', mlb:'MLB' };
+  return map[s] || s.toUpperCase();
+}
+
+function renderMarkets() {
+  const tbody = document.getElementById('marketBody');
+  tbody.innerHTML = '';
+  let opps = 0;
+
+  state.markets.forEach(m => {
+    const realProb = estimateRealProb(m);
+    const ev = ((realProb - m.polyOdds) / m.polyOdds * 100).toFixed(1);
+    const evNum = parseFloat(ev);
+    const conf = Math.min(95, Math.max(10, 50 + evNum * 2 + Math.random() * 10));
+    if (conf >= 65) opps++;
+
+    const confColor = conf >= 70 ? 'var(--accent)' : conf >= 50 ? 'var(--warn)' : 'var(--danger)';
+    const evColor = evNum > 3 ? 'var(--accent)' : evNum > 0 ? 'var(--text)' : 'var(--danger)';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="max-width:220px">
+        <div style="font-size:12px;line-height:1.4;color:var(--text)">${m.question.slice(0,70)}${m.question.length>70?'...':''}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px">Vol: $${(m.volume/1000).toFixed(0)}k</div>
+      </td>
+      <td><span class="sport-badge sport-${m.sport}">${sportLabel(m.sport)}</span></td>
+      <td style="font-family:var(--mono);font-size:13px">${(m.polyOdds*100).toFixed(1)}%</td>
+      <td style="font-family:var(--mono);font-size:13px;color:var(--info)">${(realProb*100).toFixed(1)}%</td>
+      <td style="font-family:var(--mono);font-size:13px;color:${evColor}">${evNum > 0 ? '+' : ''}${ev}%</td>
+      <td>
+        <div class="conf-bar-wrap">
+          <div class="conf-bar"><div class="conf-fill" style="width:${conf.toFixed(0)}%;background:${confColor}"></div></div>
+          <span style="font-family:var(--mono);font-size:11px;color:${confColor};width:28px;text-align:right">${conf.toFixed(0)}</span>
+        </div>
+      </td>
+      <td><button class="btn-analyze" onclick="analyzeMarket('${m.id}')">ANALIZAR</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('oppsToday').textContent = opps;
+  const avgEV = state.markets.length
+    ? (state.markets.reduce((a, m) => a + parseFloat(((estimateRealProb(m) - m.polyOdds) / m.polyOdds * 100).toFixed(1)), 0) / state.markets.length).toFixed(1)
+    : '—';
+  document.getElementById('evTotal').textContent = avgEV !== '—' ? (avgEV > 0 ? '+' : '') + avgEV + '%' : '—';
+  document.getElementById('evTotal').className = 'metric-value ' + (parseFloat(avgEV) > 0 ? 'up' : 'neutral');
+}
+
+function estimateRealProb(m) {
+  // Naive baseline: slight regression to mean + sport-specific bias
+  const sportBias = { fut: 0.02, nba: -0.01, nfl: -0.02, ten: 0.01, mlb: 0.0 };
+  const base = m.polyOdds * 0.95 + 0.025 + (sportBias[m.sport] || 0);
+  return Math.max(0.02, Math.min(0.97, base));
+}
+
+// ─── LLM ANALYSIS ─────────────────────────────────────
+async function analyzeMarket(id) {
+  const market = state.markets.find(m => m.id === id);
+  if (!market) return;
+
+  const realProb = estimateRealProb(market);
+  const ev = ((realProb - market.polyOdds) / market.polyOdds * 100).toFixed(2);
+  const kellyFull = Math.max(0, (realProb - market.polyOdds) / (1 - market.polyOdds));
+  const kellyFrac = kellyFull * state.kellyFactor;
+  const betSize = Math.min(kellyFrac * state.bankroll, state.bankroll * (state.sportLimits[market.sport] / 100));
+
+  document.getElementById('analysisEmpty').style.display = 'none';
+  document.getElementById('analysisContent').classList.remove('visible');
+  document.getElementById('aiThinking').classList.add('visible');
+  document.getElementById('analysisMeta').textContent = sportLabel(market.sport);
+
+  log(`Analizando: "${market.question.slice(0,50)}..."`, 'accent');
+
+  if (state.demo) {
+    await sleep(1800);
+    renderAnalysis(market, realProb, ev, kellyFrac, betSize, getDemoAnalysis(market, ev, betSize));
+    return;
+  }
+
+  const prompt = `Eres un analista experto en apuestas deportivas con enfoque en value betting y minimización de riesgo.
+
+MERCADO: "${market.question}"
+DEPORTE: ${market.sport.toUpperCase()}
+ODDS POLYMARKET: ${(market.polyOdds * 100).toFixed(1)}% (probabilidad implícita del mercado)
+PROBABILIDAD ESTIMADA REAL: ${(realProb * 100).toFixed(1)}%
+EXPECTED VALUE: ${ev}%
+VOLUMEN: $${(market.volume / 1000).toFixed(0)}k
+KELLY FRACCIONADO (${(state.kellyFactor*100).toFixed(0)}%): ${(kellyFrac * 100).toFixed(2)}% del bankroll
+TAMAÑO DE APUESTA SUGERIDO: $${betSize.toFixed(2)} de $${state.bankroll.toFixed(2)} bankroll
+
+Proporciona en JSON:
+{
+  "verdict": "BET" | "PASS" | "WATCH",
+  "confidence": 0-100,
+  "reasoning": "2-3 oraciones explicando tu decisión considerando el EV, riesgo y contexto deportivo",
+  "risk_factors": "principales riesgos de esta apuesta",
+  "key_insight": "el insight más importante sobre este mercado",
+  "adjusted_prob": número entre 0 y 1 con tu estimación de probabilidad real
+}
+
+Responde SOLO con el JSON, sin markdown ni texto adicional.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '{}';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const analysis = JSON.parse(clean);
+    renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis);
+    saveToHistory(market, analysis, betSize);
+    state.totalAnalysis++;
+    updateUI();
+    persist();
+    log(`Análisis completado — Veredicto: ${analysis.verdict} (conf: ${analysis.confidence})`, analysis.verdict === 'BET' ? 'accent' : 'normal');
+  } catch (e) {
+    log('Error LLM: ' + e.message, 'err');
+    document.getElementById('aiThinking').classList.remove('visible');
+    document.getElementById('analysisEmpty').style.display = 'flex';
+  }
+}
+
+function renderAnalysis(market, realProb, ev, kellyFrac, betSize, analysis) {
+  document.getElementById('aiThinking').classList.remove('visible');
+  const content = document.getElementById('analysisContent');
+  const verdictClass = { BET: 'verdict-bet', PASS: 'verdict-pass', WATCH: 'verdict-watch' }[analysis.verdict] || 'verdict-watch';
+  const confColor = analysis.confidence >= 70 ? 'var(--accent)' : analysis.confidence >= 50 ? 'var(--warn)' : 'var(--danger)';
+
+  content.innerHTML = `
+    <div class="analysis-score-row">
+      <div>
+        <div class="big-score" style="color:${confColor}">${analysis.confidence}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1px">CONFIANZA</div>
+      </div>
+      <div style="flex:1;padding-left:12px">
+        <div style="margin-bottom:8px"><span class="verdict-badge ${verdictClass}">${analysis.verdict}</span></div>
+        <div class="conf-bar" style="height:6px">
+          <div class="conf-fill" style="width:${analysis.confidence}%;background:${confColor}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kelly-row">
+      <div class="kelly-cell">
+        <div class="kelly-cell-label">POLY ODDS</div>
+        <div class="kelly-cell-value neutral">${(market.polyOdds*100).toFixed(1)}%</div>
+      </div>
+      <div class="kelly-cell">
+        <div class="kelly-cell-label">PROB REAL</div>
+        <div class="kelly-cell-value" style="color:var(--info)">${((analysis.adjusted_prob || realProb)*100).toFixed(1)}%</div>
+      </div>
+      <div class="kelly-cell">
+        <div class="kelly-cell-label">EV</div>
+        <div class="kelly-cell-value ${parseFloat(ev)>0?'up':'down'}">${parseFloat(ev)>0?'+':''}${ev}%</div>
+      </div>
+    </div>
+
+    ${analysis.verdict === 'BET' ? `
+    <div class="kelly-row">
+      <div class="kelly-cell">
+        <div class="kelly-cell-label">KELLY FRAC.</div>
+        <div class="kelly-cell-value up">${(kellyFrac*100).toFixed(1)}%</div>
+      </div>
+      <div class="kelly-cell" style="grid-column:span 2">
+        <div class="kelly-cell-label">TAMAÑO APUESTA</div>
+        <div class="kelly-cell-value up">$${betSize.toFixed(2)}</div>
+      </div>
+    </div>` : ''}
+
+    <div class="analysis-section">
+      <div class="analysis-section-title">RAZONAMIENTO</div>
+      <div class="analysis-text">${analysis.reasoning}</div>
+    </div>
+
+    ${analysis.key_insight ? `
+    <div class="analysis-section" style="border-left-color:var(--info)">
+      <div class="analysis-section-title">KEY INSIGHT</div>
+      <div class="analysis-text">${analysis.key_insight}</div>
+    </div>` : ''}
+
+    ${analysis.risk_factors ? `
+    <div class="analysis-section" style="border-left-color:var(--warn)">
+      <div class="analysis-section-title">FACTORES DE RIESGO</div>
+      <div class="analysis-text">${analysis.risk_factors}</div>
+    </div>` : ''}
+
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;padding-top:4px">
+      FASE 1 — Solo análisis. Ejecución disponible en Fase 2.
+    </div>
+  `;
+  content.classList.add('visible');
+}
+
+function getDemoAnalysis(market, ev, betSize) {
+  const evNum = parseFloat(ev);
+  return {
+    verdict: evNum > 3 ? 'BET' : evNum > 0 ? 'WATCH' : 'PASS',
+    confidence: evNum > 3 ? 72 : evNum > 0 ? 51 : 35,
+    reasoning: `El mercado muestra un EV de ${ev}% con las probabilidades actuales de Polymarket. ${evNum > 2 ? 'La discrepancia entre la probabilidad implícita del mercado y la probabilidad estadística real sugiere una oportunidad de value betting.' : 'La probabilidad del mercado está bien alineada con los datos estadísticos disponibles.'}`,
+    key_insight: `Volumen de $${(market.volume/1000).toFixed(0)}k indica ${market.volume > 300000 ? 'alta liquidez y mercado maduro' : 'mercado emergente con mayor ineficiencia potencial'}.`,
+    risk_factors: `Deporte ${market.sport.toUpperCase()}: alta varianza inherente. No apostar más del ${state.sportLimits[market.sport]}% del bankroll. Tamaño sugerido: $${betSize.toFixed(2)}.`,
+    adjusted_prob: estimateRealProb(market)
+  };
+}
+
+// ─── HISTORY & LEARNING ────────────────────────────────
+function saveToHistory(market, analysis, betSize) {
+  const entry = {
+    ts: Date.now(),
+    question: market.question,
+    sport: market.sport,
+    verdict: analysis.verdict,
+    confidence: analysis.confidence,
+    betSize: betSize,
+    polyOdds: market.polyOdds,
+    result: null // null = pending
+  };
+  state.history.unshift(entry);
+  if (state.history.length > 100) state.history.pop();
+
+  // Update patterns
+  if (!state.patterns[market.sport]) state.patterns[market.sport] = { count: 0, bets: 0, watches: 0, passes: 0 };
+  state.patterns[market.sport].count++;
+  if (analysis.verdict === 'BET') state.patterns[market.sport].bets++;
+  if (analysis.verdict === 'WATCH') state.patterns[market.sport].watches++;
+  if (analysis.verdict === 'PASS') state.patterns[market.sport].passes++;
+
+  const sports = new Set(state.history.map(h => h.sport));
+  document.getElementById('memSports').textContent = sports.size;
+
+  renderHistory();
+  renderPatterns();
+}
+
+function renderHistory() {
+  const div = document.getElementById('historyBody');
+  if (!state.history.length) return;
+  div.innerHTML = state.history.slice(0, 20).map(h => {
+    const verdictColor = { BET: 'var(--accent)', PASS: 'var(--danger)', WATCH: 'var(--warn)' }[h.verdict] || 'var(--text2)';
+    const date = new Date(h.ts).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `<div class="learning-entry">
+      <div class="learning-entry-header">
+        <span class="sport-badge sport-${h.sport}">${sportLabel(h.sport)}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${verdictColor}">${h.verdict}</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${date}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${h.question.slice(0,80)}...</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+        Confianza: ${h.confidence} | Poly: ${(h.polyOdds*100).toFixed(1)}% | Apuesta: $${h.betSize.toFixed(2)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPatterns() {
+  const div = document.getElementById('patternsBody');
+  if (!Object.keys(state.patterns).length) return;
+  div.innerHTML = Object.entries(state.patterns).map(([sport, p]) => `
+    <div class="learning-entry">
+      <div class="learning-entry-header">
+        <span class="sport-badge sport-${sport}">${sportLabel(sport)}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">${p.count} análisis</span>
+      </div>
+      <div class="kelly-row" style="margin-top:8px">
+        <div class="kelly-cell"><div class="kelly-cell-label">BET</div><div class="kelly-cell-value up">${p.bets}</div></div>
+        <div class="kelly-cell"><div class="kelly-cell-label">WATCH</div><div class="kelly-cell-value warn-c">${p.watches}</div></div>
+        <div class="kelly-cell"><div class="kelly-cell-label">PASS</div><div class="kelly-cell-value down">${p.passes}</div></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── CONFIG HANDLERS ───────────────────────────────────
+function toggleSport(sport, btn) {
+  state.sports[sport] = !state.sports[sport];
+  btn.classList.toggle('on', state.sports[sport]);
+  log(`Deporte ${sport.toUpperCase()} ${state.sports[sport] ? 'activado' : 'desactivado'}`, 'normal');
+}
+
+function updateKelly(val) {
+  state.kellyFactor = val / 100;
+  document.getElementById('kellySubLabel').textContent = `${val}% del Kelly full`;
+  log(`Kelly factor actualizado: ${val}%`, 'normal');
+}
+
+function updateStopLoss(val) {
+  state.stopLoss = val / 100;
+  document.getElementById('stopLossLabel').textContent = `${val}% del bankroll por día`;
+}
+
+function updateSportLimit(sport, val) {
+  state.sportLimits[sport] = parseInt(val);
+  document.getElementById(`lim-${sport}-val`).textContent = val + '%';
+}
+
+// ─── UTILS ────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
